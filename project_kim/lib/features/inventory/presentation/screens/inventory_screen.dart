@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:project_kim/core/db/app_database.dart';
 import 'package:project_kim/features/inventory/data/models/tag_model.dart';
 import 'package:project_kim/features/inventory/data/models/product_model.dart';
+import 'package:project_kim/features/inventory/presentation/screens/product_form_screen.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -37,7 +38,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   // =========================
-  // LOAD PRODUCTS (WITH FILTER)
+  // LOAD PRODUCTS
   // =========================
   Future<void> _loadProducts() async {
     final db = await _db.database;
@@ -79,6 +80,22 @@ class _InventoryScreenState extends State<InventoryScreen> {
     await _loadProducts();
   }
 
+  // =========================
+  // OPEN CREATE PRODUCT
+  // =========================
+  Future<void> _openCreateProduct() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ProductFormScreen(),
+      ),
+    );
+
+    if (result == true) {
+      _loadProducts();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -89,14 +106,19 @@ class _InventoryScreenState extends State<InventoryScreen> {
             icon: const Icon(Icons.clear),
             onPressed: _clearFilter,
             tooltip: "Limpiar filtros",
-          )
+          ),
         ],
+      ),
+
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openCreateProduct,
+        child: const Icon(Icons.add),
       ),
 
       body: Column(
         children: [
           // =========================
-          // TAG FILTER CHIPS
+          // TAG FILTER
           // =========================
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -111,8 +133,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   child: FilterChip(
                     label: Text(tag.name),
                     selected: isSelected,
-                    onSelected: (_) =>
-                        _toggleTag(tag.id!),
+                    onSelected: (_) => _toggleTag(tag.id!),
                   ),
                 );
               }).toList(),
@@ -137,9 +158,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       return ListTile(
                         leading: const Icon(Icons.inventory),
                         title: Text(product.name),
-                        subtitle: Text(
-                          product.brand,
-                        ),
+
+subtitle: Text(
+  "Marca: ${product.brand} • "
+  "Stock Disponible: ${product.stockQuantity} ${product.stockUnit} • "
+  "Precio: ₡${product.unitPrice}",
+),
                       );
                     },
                   ),

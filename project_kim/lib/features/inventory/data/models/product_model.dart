@@ -1,13 +1,21 @@
 class ProductModel {
   final int? id;
   final int categoryId;
+
   final String name;
+
   final double unitPrice;
-  final double stockQuantity;
+
+  // 🔥 STOCK DEBE SER INT en inventario real
+  final int stockQuantity;
+
   final String stockUnit; // "unit" | "ml" | "kg"
+
   final String brand;
   final String supplier;
-  final double minStockQuantity;
+
+  final int minStockQuantity;
+
   final DateTime lastUpdatedAt;
   final String lastUpdatedBy;
 
@@ -25,8 +33,14 @@ class ProductModel {
     required this.lastUpdatedBy,
   });
 
-  bool get isLowStock => stockQuantity < minStockQuantity;
+  // -------------------------
+  // BUSINESS LOGIC
+  // -------------------------
+  bool get isLowStock => stockQuantity <= minStockQuantity;
 
+  // -------------------------
+  // TO MAP (DB)
+  // -------------------------
   Map<String, dynamic> toMap() {
     return {
       "id": id,
@@ -43,17 +57,26 @@ class ProductModel {
     };
   }
 
+  // -------------------------
+  // FROM MAP (DB)
+  // -------------------------
   factory ProductModel.fromMap(Map<String, dynamic> map) {
     return ProductModel(
       id: map["id"],
       categoryId: map["categoryId"],
       name: map["name"],
       unitPrice: (map["unitPrice"] as num).toDouble(),
-      stockQuantity: (map["stockQuantity"] as num).toDouble(),
+
+      // 🔥 FIX: int seguro
+      stockQuantity: (map["stockQuantity"] as num).toInt(),
+
       stockUnit: map["stockUnit"],
       brand: map["brand"],
       supplier: map["supplier"],
-      minStockQuantity: (map["minStockQuantity"] as num).toDouble(),
+
+      // 🔥 FIX: int seguro
+      minStockQuantity: (map["minStockQuantity"] as num).toInt(),
+
       lastUpdatedAt: DateTime.parse(map["lastUpdatedAt"]),
       lastUpdatedBy: map["lastUpdatedBy"],
     );
