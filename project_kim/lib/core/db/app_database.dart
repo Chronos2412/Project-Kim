@@ -155,27 +155,26 @@ class AppDatabase {
   // =====================================================
 
   Future<List<Map<String, dynamic>>> getProductsByTags(
-    Database db,
-    List<int> tagIds,
-  ) async {
-    if (tagIds.isEmpty) {
-      return await db.query(
-        'products',
-        orderBy: 'id DESC',
-      );
-    }
-
-    final placeholders =
-        List.filled(tagIds.length, '?').join(',');
-
-    return await db.rawQuery('''
-      SELECT DISTINCT p.*
-      FROM products p
-      INNER JOIN product_tags pt ON pt.productId = p.id
-      WHERE pt.tagId IN ($placeholders)
-      ORDER BY p.id DESC
-    ''', tagIds);
+  Database db,
+  List<int> tagIds,
+) async {
+  if (tagIds.isEmpty) {
+    return await db.query(
+      'products',
+      orderBy: 'name ASC',
+    );
   }
+
+  final placeholders = List.filled(tagIds.length, '?').join(',');
+
+  return await db.rawQuery('''
+    SELECT DISTINCT p.*
+    FROM products p
+    INNER JOIN product_tags pt ON pt.productId = p.id
+    WHERE pt.tagId IN ($placeholders)
+    ORDER BY p.name ASC
+  ''', tagIds);
+}
 
   // =====================================================
   // 🟢 OPTIONAL: LOGS

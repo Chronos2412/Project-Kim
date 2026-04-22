@@ -3,6 +3,7 @@ import 'package:project_kim/core/db/app_database.dart';
 import 'package:project_kim/features/inventory/data/models/tag_model.dart';
 import 'package:project_kim/features/inventory/data/models/product_model.dart';
 import 'package:project_kim/features/inventory/presentation/screens/product_form_screen.dart';
+import 'package:project_kim/features/inventory/presentation/screens/product_detail_screen.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -158,12 +159,21 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       return ListTile(
                         leading: const Icon(Icons.inventory),
                         title: Text(product.name),
+                        subtitle: Text(
+                          "Marca: ${product.brand} • "
+                          "Stock Disponible: ${product.stockQuantity} ${product.stockUnit} • "
+                          "Precio: ₡${product.unitPrice}",
+                        ),
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ProductDetailScreen(product: product),
+                            ),
+                          );
 
-subtitle: Text(
-  "Marca: ${product.brand} • "
-  "Stock Disponible: ${product.stockQuantity} ${product.stockUnit} • "
-  "Precio: ₡${product.unitPrice}",
-),
+                          _loadProducts(); // refresca al volver
+                        },
                       );
                     },
                   ),
