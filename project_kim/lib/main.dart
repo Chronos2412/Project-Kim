@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:project_kim/features/dashboard/presentation/screens/dashboard_screen.dart';
+import 'package:project_kim/features/inventory/presentation/screens/inventory_screen.dart';
 
 void main() {
   runApp(const ProjectKimApp());
@@ -17,7 +17,7 @@ class ProjectKimApp extends StatelessWidget {
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.pink),
       ),
-      home: const DashboardScreen(),
+      home: InventoryScreen(),
     );
   }
 }

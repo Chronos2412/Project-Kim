@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:project_kim/core/db/app_database.dart';
 import 'package:project_kim/features/inventory/data/models/product_log_model.dart';
 import 'package:project_kim/features/inventory/data/repositories/inventory_repository.dart';
 

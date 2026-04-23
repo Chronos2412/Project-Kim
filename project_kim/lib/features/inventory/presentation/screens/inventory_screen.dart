@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:project_kim/core/db/app_database.dart';
-import 'package:project_kim/features/inventory/data/models/tag_model.dart';
 import 'package:project_kim/features/inventory/data/models/product_model.dart';
 import 'package:project_kim/features/inventory/presentation/screens/product_form_screen.dart';
 import 'package:project_kim/features/inventory/presentation/screens/product_detail_screen.dart';
+import 'package:project_kim/features/inventory/domain/erp_ai_engine.dart';
+import 'package:project_kim/features/inventory/presentation/screens/erp_control_center_screen.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -15,76 +16,30 @@ class InventoryScreen extends StatefulWidget {
 class _InventoryScreenState extends State<InventoryScreen> {
   final AppDatabase _db = AppDatabase();
 
-  List<TagModel> _allTags = [];
-  List<int> _selectedTagIds = [];
   List<ProductModel> _products = [];
+  final TextEditingController _searchCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _loadTags();
-    _loadProducts();
+    _loadData();
   }
 
-  // =========================
-  // LOAD TAGS
-  // =========================
-  Future<void> _loadTags() async {
-    final db = await _db.database;
-    final result = await _db.getAllTags(db);
-
-    setState(() {
-      _allTags = result.map((e) => TagModel.fromMap(e)).toList();
-    });
-  }
-
-  // =========================
-  // LOAD PRODUCTS
-  // =========================
-  Future<void> _loadProducts() async {
+  Future<void> _loadData() async {
     final db = await _db.database;
 
-    final result = await _db.getProductsByTags(
-      db,
-      _selectedTagIds,
+    final products = await _db.getProducts(
+      db: db,
+      tagIds: [],
+      search: _searchCtrl.text,
     );
 
     setState(() {
-      _products =
-          result.map((e) => ProductModel.fromMap(e)).toList();
+      _products = products.map((e) => ProductModel.fromMap(e)).toList();
     });
   }
 
-  // =========================
-  // TOGGLE TAG FILTER
-  // =========================
-  Future<void> _toggleTag(int tagId) async {
-    setState(() {
-      if (_selectedTagIds.contains(tagId)) {
-        _selectedTagIds.remove(tagId);
-      } else {
-        _selectedTagIds.add(tagId);
-      }
-    });
-
-    await _loadProducts();
-  }
-
-  // =========================
-  // CLEAR FILTER
-  // =========================
-  Future<void> _clearFilter() async {
-    setState(() {
-      _selectedTagIds.clear();
-    });
-
-    await _loadProducts();
-  }
-
-  // =========================
-  // OPEN CREATE PRODUCT
-  // =========================
-  Future<void> _openCreateProduct() async {
+  Future<void> _openCreate() async {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -93,87 +48,184 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
 
     if (result == true) {
-      _loadProducts();
+      _loadData();
     }
+  }
+
+  Future<void> _openEdit(ProductModel product) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProductFormScreen(product: product),
+      ),
+    );
+
+    if (result == true) {
+      _loadData();
+    }
+  }
+
+  Future<void> _openDetail(ProductModel product) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProductDetailScreen(product: product),
+      ),
+    );
+
+    _loadData();
+  }
+
+  Widget _kpi(String title, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(title),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final ai = ErpAiEngine(_products);
+
+    final health = ai.healthScore();
+    final riskCount = ai.riskProducts().length;
+    final criticalCount = ai.criticalStock().length;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Inventario"),
+        title: const Text("Inventario 360"),
+        centerTitle: true,
+
+        // =========================
+        // ERP BUTTON
+        // =========================
         actions: [
           IconButton(
-            icon: const Icon(Icons.clear),
-            onPressed: _clearFilter,
-            tooltip: "Limpiar filtros",
+            icon: const Icon(Icons.analytics),
+            tooltip: "Centro de Control ERP",
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ErpControlCenterScreen(),
+                ),
+              );
+
+              // 🔥 refresca automáticamente al volver del ERP
+              _loadData();
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
           ),
         ],
       ),
 
       floatingActionButton: FloatingActionButton(
-        onPressed: _openCreateProduct,
+        onPressed: _openCreate,
         child: const Icon(Icons.add),
       ),
 
       body: Column(
         children: [
           // =========================
-          // TAG FILTER
+          // KPI BAR
           // =========================
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          Padding(
             padding: const EdgeInsets.all(12),
-            child: Row(
-              children: _allTags.map((tag) {
-                final isSelected =
-                    _selectedTagIds.contains(tag.id);
-
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(tag.name),
-                    selected: isSelected,
-                    onSelected: (_) => _toggleTag(tag.id!),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blueGrey.shade50,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _kpi(
+                    "Salud",
+                    "${health.toStringAsFixed(0)}%",
                   ),
-                );
-              }).toList(),
+                  _kpi(
+                    "En riesgo",
+                    riskCount.toString(),
+                  ),
+                  _kpi(
+                    "Críticos",
+                    criticalCount.toString(),
+                  ),
+                ],
+              ),
             ),
           ),
 
-          const Divider(height: 1),
+          // =========================
+          // SEARCH
+          // =========================
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: TextField(
+              controller: _searchCtrl,
+              onChanged: (_) => _loadData(),
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: "Buscar producto...",
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 10),
 
           // =========================
-          // PRODUCT LIST
+          // LIST
           // =========================
           Expanded(
             child: _products.isEmpty
-                ? const Center(
-                    child: Text("No hay productos"),
-                  )
+                ? const Center(child: Text("No hay productos"))
                 : ListView.builder(
                     itemCount: _products.length,
                     itemBuilder: (context, index) {
-                      final product = _products[index];
+                      final p = _products[index];
+                      final isLow = p.stockQuantity <= p.minStockQuantity;
 
-                      return ListTile(
-                        leading: const Icon(Icons.inventory),
-                        title: Text(product.name),
-                        subtitle: Text(
-                          "Marca: ${product.brand} • "
-                          "Stock Disponible: ${product.stockQuantity} ${product.stockUnit} • "
-                          "Precio: ₡${product.unitPrice}",
+                      return Card(
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
                         ),
-                        onTap: () async {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ProductDetailScreen(product: product),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: isLow ? Colors.red : Colors.green,
+                            child: Icon(
+                              isLow ? Icons.warning : Icons.inventory,
+                              color: Colors.white,
                             ),
-                          );
-
-                          _loadProducts(); // refresca al volver
-                        },
+                          ),
+                          title: Text(p.name),
+                          subtitle: Text(
+                            "Marca: ${p.brand} • Stock: ${p.stockQuantity} ${p.stockUnit} • ₡${p.unitPrice}",
+                          ),
+                          onTap: () => _openDetail(p),
+                          trailing: PopupMenuButton(
+                            itemBuilder: (context) => const [
+                              PopupMenuItem(
+                                value: 'edit',
+                                child: Text('Editar'),
+                              ),
+                            ],
+                            onSelected: (_) => _openEdit(p),
+                          ),
+                        ),
                       );
                     },
                   ),

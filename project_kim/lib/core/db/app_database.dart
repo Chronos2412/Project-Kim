@@ -5,7 +5,7 @@ class AppDatabase {
   static Database? _db;
 
   // =========================
-  // GET DB INSTANCE
+  // DB INSTANCE
   // =========================
   Future<Database> get database async {
     if (_db != null) return _db!;
@@ -14,7 +14,7 @@ class AppDatabase {
   }
 
   // =========================
-  // INIT DATABASE
+  // INIT DB
   // =========================
   Future<Database> _initDB(String fileName) async {
     final dbPath = await getDatabasesPath();
@@ -23,28 +23,27 @@ class AppDatabase {
     return await openDatabase(
       path,
       version: 1,
-
       onConfigure: (db) async {
-        // 🔥 IMPORTANT: enable foreign keys
         await db.execute('PRAGMA foreign_keys = ON');
       },
-
       onCreate: (db, version) async {
-        // =========================
-        // PRODUCTS
-        // =========================
         await db.execute('''
           CREATE TABLE products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             description TEXT,
-            createdAt TEXT NOT NULL
+            categoryId INTEGER,
+            brand TEXT,
+            supplier TEXT,
+            unitPrice REAL,
+            stockQuantity REAL,
+            stockUnit TEXT,
+            minStockQuantity REAL,
+            lastUpdatedAt TEXT,
+            lastUpdatedBy TEXT
           )
         ''');
 
-        // =========================
-        // TAGS
-        // =========================
         await db.execute('''
           CREATE TABLE tags (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,9 +52,6 @@ class AppDatabase {
           )
         ''');
 
-        // =========================
-        // PRODUCT_TAGS (MANY TO MANY)
-        // =========================
         await db.execute('''
           CREATE TABLE product_tags (
             productId INTEGER NOT NULL,
@@ -66,25 +62,105 @@ class AppDatabase {
           )
         ''');
 
-        // =========================
-        // PRODUCT LOGS
-        // =========================
         await db.execute('''
           CREATE TABLE product_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            productId INTEGER NOT NULL,
-            action TEXT NOT NULL,
-            createdAt TEXT NOT NULL
+            productId INTEGER,
+            action TEXT,
+            createdAt TEXT
           )
         ''');
       },
     );
   }
 
-  // =====================================================
-  // 🟢 TAGS
-  // =====================================================
+  // =========================
+  // INSERT PRODUCT
+  // =========================
+  Future<int> insertProduct(
+    Database db,
+    Map<String, dynamic> data,
+  ) async {
+    return await db.insert(
+      'products',
+      data,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
 
+  // =========================
+  // UPDATE PRODUCT
+  // =========================
+  Future<int> updateProduct(
+    Database db,
+    Map<String, dynamic> data,
+  ) async {
+    final id = data['id'];
+
+    return await db.update(
+      'products',
+      data,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // =========================
+  // GET PRODUCTS (SEARCH + FILTER)
+  // =========================
+  Future<List<Map<String, dynamic>>> getProducts({
+    required Database db,
+    List<int>? tagIds,
+    String? search,
+  }) async {
+    final searchQuery = (search ?? "").trim();
+    final hasSearch = searchQuery.isNotEmpty;
+    final hasTags = tagIds != null && tagIds.isNotEmpty;
+
+    final searchLike = "%${searchQuery.toLowerCase()}%";
+
+    if (!hasTags && !hasSearch) {
+      return await db.query(
+        'products',
+        orderBy: 'name ASC',
+      );
+    }
+
+    final tagsCondition = hasTags
+        ? "pt.tagId IN (${List.filled(tagIds.length, '?').join(',')})"
+        : "1=1";
+
+    return await db.rawQuery(
+      '''
+      SELECT DISTINCT p.*
+      FROM products p
+      LEFT JOIN product_tags pt ON pt.productId = p.id
+      LEFT JOIN tags t ON t.id = pt.tagId
+      WHERE
+        $tagsCondition
+        AND (
+          ? = ''
+          OR LOWER(p.name) LIKE ?
+          OR LOWER(p.brand) LIKE ?
+          OR LOWER(p.supplier) LIKE ?
+          OR LOWER(t.name) LIKE ?
+        )
+      ORDER BY p.name ASC
+      ''',
+      [
+        if (hasTags) ...tagIds,
+        searchQuery,
+        searchLike,
+        searchLike,
+        searchLike,
+        searchLike,
+      ],
+    );
+  }
+
+  // =========================
+  // TAGS
+  // =========================
   Future<int> getOrCreateTag(Database db, String name) async {
     final normalized = name.trim();
 
@@ -112,16 +188,14 @@ class AppDatabase {
     );
   }
 
-  // =====================================================
-  // 🟢 PRODUCT TAGS RELATION
-  // =====================================================
-
+  // =========================
+  // PRODUCT TAGS
+  // =========================
   Future<void> saveProductTags(
     Database db,
     int productId,
     List<String> tagNames,
   ) async {
-    // remove old relations
     await db.delete(
       'product_tags',
       where: 'productId = ?',
@@ -150,36 +224,9 @@ class AppDatabase {
     ''', [productId]);
   }
 
-  // =====================================================
-  // 🟢 PRODUCTS FILTER
-  // =====================================================
-
-  Future<List<Map<String, dynamic>>> getProductsByTags(
-  Database db,
-  List<int> tagIds,
-) async {
-  if (tagIds.isEmpty) {
-    return await db.query(
-      'products',
-      orderBy: 'name ASC',
-    );
-  }
-
-  final placeholders = List.filled(tagIds.length, '?').join(',');
-
-  return await db.rawQuery('''
-    SELECT DISTINCT p.*
-    FROM products p
-    INNER JOIN product_tags pt ON pt.productId = p.id
-    WHERE pt.tagId IN ($placeholders)
-    ORDER BY p.name ASC
-  ''', tagIds);
-}
-
-  // =====================================================
-  // 🟢 OPTIONAL: LOGS
-  // =====================================================
-
+  // =========================
+  // LOGS
+  // =========================
   Future<void> insertLog(
     Database db,
     int productId,
