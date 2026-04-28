@@ -1,11 +1,11 @@
 name: project_kim
-description: "A new Flutter project."
+description: ERP / Sistema de gestión para Experiencias 360°
 publish_to: 'none'
 
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.11.4
+  sdk: ">=3.4.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -13,35 +13,41 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
-  # =========================
   # DATABASE
-  # =========================
   sqflite: ^2.3.3+1
   path: ^1.9.0
-  path_provider: ^2.1.4
 
-  # =========================
-  # UTILITIES
-  # =========================
+  # UI / HELPERS
   intl: ^0.19.0
 
-  # =========================
-  # EXPORTS (future ERP use)
-  # =========================
-  pdf: ^3.11.1
-  printing: ^5.13.4
+  # EXPORT EXCEL
   excel: ^4.0.6
 
-  # =========================
-  # 📊 ERP ANALYTICS (NEW)
-  # =========================
-  fl_chart: ^0.68.0
+  # EXPORT PDF
+  pdf: ^3.11.1
+  printing: ^5.13.4
+
+  # FILE PICKER (save as)
+  file_selector: ^1.0.3
+
+  # FILE PATHS
+  path_provider: ^2.1.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  flutter_lints: ^6.0.0
+  flutter_lints: ^4.0.0
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/logo_experiencias360.jpg
+
+  fonts:
+    - family: NotoSans
+      fonts:
+        - asset: assets/fonts/NotoSans-Regular.ttf
+        - asset: assets/fonts/NotoSans-Bold.ttf
+          weight: 700

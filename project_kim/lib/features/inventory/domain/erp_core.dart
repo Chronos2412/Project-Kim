@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:project_kim/core/db/app_database.dart';
 import 'package:project_kim/features/inventory/data/models/product_model.dart';
 import 'package:project_kim/features/inventory/domain/erp_ai_engine.dart';
@@ -6,29 +6,40 @@ import 'package:project_kim/features/inventory/domain/erp_ai_engine.dart';
 class ErpCore extends ChangeNotifier {
   final AppDatabase _db = AppDatabase();
 
-  List<ProductModel> _products = [];
-  List<ProductModel> get products => _products;
+  bool loading = false;
 
-  bool _loading = false;
-  bool get loading => _loading;
+  List<ProductModel> products = [];
 
-  ErpAiEngine get ai => ErpAiEngine(_products);
+  ErpAiEngine get ai => ErpAiEngine(products);
 
-  Future<void> refresh({String search = ""}) async {
-    _loading = true;
+  // =========================
+  // SET PRODUCTS (InventoryScreen use)
+  // =========================
+  void setProducts(List<ProductModel> newProducts) {
+    products = newProducts;
+    notifyListeners();
+  }
+
+  // =========================
+  // REFRESH FROM DB (ERP use)
+  // =========================
+  Future<void> refresh() async {
+    loading = true;
     notifyListeners();
 
-    final conn = await _db.database;
+    final db = await _db.database;
 
-    final data = await _db.getProducts(
-      db: conn,
+    final result = await _db.getProducts(
+      db: db,
       tagIds: [],
-      search: search,
+      search: "",
     );
 
-    _products = data.map((e) => ProductModel.fromMap(e)).toList();
+    products = result.map((e) => ProductModel.fromMap(e)).toList();
 
-    _loading = false;
+    loading = false;
     notifyListeners();
+
+    debugPrint("ERP CORE REFRESH DONE: products=${products.length}");
   }
 }

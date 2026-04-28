@@ -19,6 +19,34 @@ class _ErpControlCenterScreenState extends State<ErpControlCenterScreen> {
     core.refresh();
   }
 
+  void _showInfo() {
+    showDialog(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          title: const Text("Reglas ERP Inventario"),
+          content: const Text(
+            "📌 Clasificación de productos:\n\n"
+            "🔴 CRÍTICO:\n"
+            "Stock < Stock mínimo\n\n"
+            "🟠 EN RIESGO:\n"
+            "Stock ≥ Stock mínimo y Stock < Stock mínimo × 1.2\n\n"
+            "🟢 OK:\n"
+            "Stock ≥ Stock mínimo × 1.2\n\n"
+            "📊 Salud del Inventario:\n"
+            "Se calcula como el porcentaje de productos NO críticos.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cerrar"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -36,6 +64,12 @@ class _ErpControlCenterScreenState extends State<ErpControlCenterScreen> {
             centerTitle: true,
             actions: [
               IconButton(
+                tooltip: "Info",
+                icon: const Icon(Icons.info_outline),
+                onPressed: _showInfo,
+              ),
+              IconButton(
+                tooltip: "Refrescar",
                 icon: const Icon(Icons.refresh),
                 onPressed: core.refresh,
               ),
@@ -72,13 +106,13 @@ class _ErpControlCenterScreenState extends State<ErpControlCenterScreen> {
                                       await Navigator.push(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (_) =>
-                                              ErpRiskListScreen(
-                                            mode: "risk",
+                                          builder: (_) => ErpRiskListScreen(
                                             core: core,
+                                            showCritical: false,
                                           ),
                                         ),
                                       );
+
                                       await core.refresh();
                                     },
                               child: Opacity(
@@ -98,13 +132,13 @@ class _ErpControlCenterScreenState extends State<ErpControlCenterScreen> {
                                       await Navigator.push(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (_) =>
-                                              ErpRiskListScreen(
-                                            mode: "critical",
+                                          builder: (_) => ErpRiskListScreen(
                                             core: core,
+                                            showCritical: true,
                                           ),
                                         ),
                                       );
+
                                       await core.refresh();
                                     },
                               child: Opacity(

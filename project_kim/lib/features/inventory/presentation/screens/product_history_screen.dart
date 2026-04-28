@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:project_kim/features/inventory/data/models/product_log_model.dart';
-import 'package:project_kim/features/inventory/data/repositories/inventory_repository.dart';
+import 'package:project_kim/core/db/app_database.dart';
 
 class ProductHistoryScreen extends StatefulWidget {
   final int productId;
@@ -17,10 +16,10 @@ class ProductHistoryScreen extends StatefulWidget {
 }
 
 class _ProductHistoryScreenState extends State<ProductHistoryScreen> {
-  final InventoryRepository _repo = InventoryRepository();
+  final AppDatabase _db = AppDatabase();
 
+  List<Map<String, dynamic>> _logs = [];
   bool _loading = true;
-  List<ProductLogModel> _logs = [];
 
   @override
   void initState() {
@@ -28,50 +27,10 @@ class _ProductHistoryScreenState extends State<ProductHistoryScreen> {
     _loadLogs();
   }
 
-  String _translateAction(String action) {
-    switch (action) {
-      case "CREATE":
-        return "Creación";
-      case "UPDATE":
-        return "Actualización";
-      case "DELETE":
-        return "Eliminación";
-      case "ADJUST_STOCK":
-        return "Ajuste de Stock";
-      default:
-        return action;
-    }
-  }
-
-  String _translateField(String field) {
-    switch (field) {
-      case "ALL":
-        return "Producto Completo";
-      case "name":
-        return "Nombre";
-      case "unitPrice":
-        return "Precio por Unidad";
-      case "stockQuantity":
-        return "Cantidad en Stock";
-      case "stockUnit":
-        return "Unidad";
-      case "brand":
-        return "Marca";
-      case "supplier":
-        return "Proveedor";
-      case "minStockQuantity":
-        return "Stock Mínimo";
-      case "categoryId":
-        return "Categoría";
-      default:
-        return field;
-    }
-  }
-
   Future<void> _loadLogs() async {
-    setState(() => _loading = true);
+    final db = await _db.database;
 
-    final logs = await _repo.getProductLogsLast2Months(widget.productId);
+    final logs = await _db.getLogsByProduct(db, widget.productId);
 
     setState(() {
       _logs = logs;
@@ -79,61 +38,47 @@ class _ProductHistoryScreenState extends State<ProductHistoryScreen> {
     });
   }
 
-  String _formatDate(DateTime dt) {
-    final local = dt.toLocal();
-    return "${local.day.toString().padLeft(2, '0')}/"
-        "${local.month.toString().padLeft(2, '0')}/"
-        "${local.year} "
-        "${local.hour.toString().padLeft(2, '0')}:"
-        "${local.minute.toString().padLeft(2, '0')}";
+  String _formatDate(String iso) {
+    try {
+      final dt = DateTime.parse(iso);
+      return "${dt.day.toString().padLeft(2, '0')}/"
+          "${dt.month.toString().padLeft(2, '0')}/"
+          "${dt.year} "
+          "${dt.hour.toString().padLeft(2, '0')}:"
+          "${dt.minute.toString().padLeft(2, '0')}";
+    } catch (_) {
+      return iso;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Historial: ${widget.productName}"),
+        title: Text("Historial - ${widget.productName}"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadLogs,
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _logs.isEmpty
-              ? const Center(
-                  child: Text(
-                    "No hay historial en los últimos 2 meses.",
-                    style: TextStyle(fontSize: 16),
-                  ),
-                )
+              ? const Center(child: Text("No hay historial disponible."))
               : ListView.builder(
-                  padding: const EdgeInsets.all(14),
                   itemCount: _logs.length,
                   itemBuilder: (context, index) {
                     final log = _logs[index];
 
-                    return Card(
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: ListTile(
-                        title: Text(
-                          "${_translateAction(log.actionType)} - ${_translateField(log.fieldChanged)}",
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text("Fecha: ${_formatDate(log.createdAt)}"),
-                              Text("Usuario: ${log.changedBy}"),
-                              if (log.oldValue != null || log.newValue != null)
-                                Text(
-                                  "Cambio: ${log.oldValue ?? "-"} → ${log.newValue ?? "-"}",
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
+                    final action = log["action"]?.toString() ?? "";
+                    final createdAt = log["createdAt"]?.toString() ?? "";
+
+                    return ListTile(
+                      leading: const Icon(Icons.history),
+                      title: Text(action),
+                      subtitle: Text(_formatDate(createdAt)),
                     );
                   },
                 ),

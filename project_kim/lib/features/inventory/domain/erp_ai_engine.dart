@@ -6,108 +6,116 @@ class ErpAiEngine {
   ErpAiEngine(this.products);
 
   // =========================
-  // 🧠 HEALTH DEL INVENTARIO
+  // VALIDACIONES
   // =========================
-  double healthScore() {
-  if (products.isEmpty) return 0;
-
-  final healthy = products.where((p) {
-    return p.stockQuantity > p.minStockQuantity;
-  }).length;
-
-  return (healthy / products.length) * 100;
-}
-
-  // =========================
-  // 📦 COBERTURA DE STOCK
-  // =========================
-  double _stockCoverage(ProductModel p) {
-    if (p.minStockQuantity <= 0) return 100;
-
-    final coverage =
-        (p.stockQuantity / p.minStockQuantity) * 100;
-
-    return coverage.clamp(0, 100).toDouble();
+  bool _hasValidMin(ProductModel p) {
+    return p.minStockQuantity > 0;
   }
 
   // =========================
-  // ⚠️ RISK LEVEL (0 - 100)
+  // CRÍTICO
+  // stock <= minStock
   // =========================
-  double riskLevel(ProductModel p) {
-    final coverage = _stockCoverage(p);
-
-    final risk = 100 - coverage;
-
-    return risk.clamp(0, 100).toDouble();
+  bool isCritical(ProductModel p) {
+    if (!_hasValidMin(p)) return false;
+    return p.stockQuantity <= p.minStockQuantity;
   }
 
   // =========================
-  // 🔴 PRODUCTOS EN RIESGO
+  // RIESGO
+  // stock > minStock AND <= minStock * 1.2
   // =========================
-  List<ProductModel> riskProducts() {
-    return products.where((p) {
-      return riskLevel(p) > 20;
-    }).toList();
+  bool isRisk(ProductModel p) {
+    if (!_hasValidMin(p)) return false;
+
+    final min = p.minStockQuantity;
+    final warning = min * 1.2;
+
+    return p.stockQuantity > min && p.stockQuantity <= warning;
   }
 
   // =========================
-  // 🔴 CRÍTICOS (STOCK BAJO)
+  // LISTA CRÍTICOS
   // =========================
   List<ProductModel> criticalStock() {
-    return products.where((p) {
-      return p.stockQuantity <= p.minStockQuantity;
-    }).toList();
+    return products.where(isCritical).toList();
   }
 
   // =========================
-  // 🔥 TOP RISK PRODUCTS (FIX DEL ERROR)
+  // LISTA RIESGO
   // =========================
-  List<ProductModel> topRiskProducts() {
-    final sorted = List<ProductModel>.from(products);
-
-    sorted.sort((a, b) {
-      return riskLevel(b).compareTo(riskLevel(a));
-    });
-
-    return sorted;
+  List<ProductModel> riskProducts() {
+    return products.where(isRisk).toList();
   }
 
   // =========================
-  // 💰 VALOR TOTAL INVENTARIO
+  // SCORE DE SALUD (%)
   // =========================
-  double totalInventoryValue() {
-    double total = 0;
+  double healthScore() {
+    if (products.isEmpty) return 100;
 
-    for (final p in products) {
-      total += p.unitPrice * p.stockQuantity;
-    }
+    final criticalCount = criticalStock().length;
+    final riskCount = riskProducts().length;
 
-    return total;
+    // peso:
+    // crítico resta 10%
+    // riesgo resta 5%
+    double score = 100 - (criticalCount * 10) - (riskCount * 5);
+
+    if (score < 0) score = 0;
+    if (score > 100) score = 100;
+
+    return score;
   }
 
   // =========================
-  // ⏳ DAYS LEFT (BÁSICO ERP)
+  // RISK LEVEL (0 - 100)
   // =========================
-  int daysLeft(ProductModel p) {
-    if (p.stockQuantity <= 0) return 0;
+  double riskLevel(ProductModel p) {
+    if (!_hasValidMin(p)) return 0;
 
-    const dailyConsumption = 1;
+    final stock = p.stockQuantity;
+    final min = p.minStockQuantity;
 
-    return (p.stockQuantity / dailyConsumption).floor();
+    if (stock <= 0) return 100;
+
+    // Si está por debajo del mínimo → riesgo máximo
+    if (stock <= min) return 100;
+
+    // Si está dentro del rango de riesgo → riesgo medio
+    final warning = min * 1.2;
+    if (stock <= warning) return 70;
+
+    // Si está saludable
+    return 0;
   }
 
   // =========================
-  // 🧠 INSIGHT ERP
+  // TOP RISK PRODUCTS
+  // =========================
+  List<ProductModel> topRiskProducts({int limit = 5}) {
+    final list = [...products];
+
+    list.sort((a, b) => riskLevel(b).compareTo(riskLevel(a)));
+
+    return list.take(limit).toList();
+  }
+
+  // =========================
+  // INSIGHT (TEXT AI)
   // =========================
   String insight() {
+    final critical = criticalStock().length;
     final risk = riskProducts().length;
 
-    if (risk == 0) {
-      return "Inventario saludable";
-    } else if (risk <= 3) {
-      return "Atención: productos en riesgo";
-    } else {
-      return "Alerta crítica de inventario";
+    if (critical > 0) {
+      return "⚠️ Hay $critical productos críticos. Se recomienda reabastecer inmediatamente.";
     }
+
+    if (risk > 0) {
+      return "🟠 Hay $risk productos en riesgo. Revisa pronto el inventario.";
+    }
+
+    return "✅ Inventario saludable. No hay productos en riesgo ni críticos.";
   }
 }

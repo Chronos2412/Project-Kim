@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:project_kim/core/theme/app_theme.dart';
 import 'package:project_kim/features/inventory/presentation/screens/inventory_screen.dart';
 
 void main() {
@@ -11,13 +12,10 @@ class ProjectKimApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Project Kim',
+      title: "Project Kim",
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.pink),
-      ),
-      home: InventoryScreen(),
+      theme: AppTheme.lightTheme,
+      home: const InventoryScreen(),
     );
   }
 }
