@@ -23,7 +23,7 @@ class AppDatabase {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -91,6 +91,93 @@ class AppDatabase {
           )
         ''');
 
+        // =========================
+        // BOOKINGS (EVENTOS)
+        // =========================
+        await db.execute('''
+          CREATE TABLE bookings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            bookingType TEXT NOT NULL, -- COTIZACION / RESERVACION
+
+            celebrantFirstName TEXT NOT NULL,
+            celebrantLastName TEXT NOT NULL,
+            celebrantAge INTEGER NOT NULL,
+
+            guardianName TEXT NOT NULL,
+            customerPhone TEXT NOT NULL,
+
+            childCount INTEGER NOT NULL,
+
+            eventDate TEXT NOT NULL,
+            timeSlot TEXT NOT NULL,
+
+            fullAddress TEXT NOT NULL,
+
+            packageName TEXT NOT NULL,
+            packagePricePerChild REAL NOT NULL,
+
+            foodAdultsType TEXT,
+            foodAdultsCount INTEGER,
+            foodAdultsTotal REAL,
+
+            foodKidsType TEXT,
+            foodKidsCount INTEGER,
+            foodKidsTotal REAL,
+
+            decorationType TEXT,
+            decorationTotal REAL,
+
+            discountAmount REAL NOT NULL,
+
+            subtotalAmount REAL NOT NULL,
+            totalAmount REAL NOT NULL,
+
+            depositAmount REAL NOT NULL,
+
+            status TEXT NOT NULL, -- Pendiente / Confirmada / Pagada / Cancelada / Finalizada
+
+            notes TEXT,
+
+            createdAt TEXT NOT NULL,
+            createdBy TEXT NOT NULL
+          )
+        ''');
+
+        // =========================
+        // BOOKING PAYMENTS
+        // =========================
+        await db.execute('''
+          CREATE TABLE booking_payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bookingId INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            paymentDate TEXT NOT NULL,
+            createdAt TEXT NOT NULL,
+            createdBy TEXT NOT NULL,
+            note TEXT,
+            FOREIGN KEY (bookingId) REFERENCES bookings(id) ON DELETE CASCADE
+          )
+        ''');
+
+        // =========================
+        // BOOKING LOGS
+        // =========================
+        await db.execute('''
+          CREATE TABLE booking_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bookingId INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            actionType TEXT NOT NULL,
+            fieldChanged TEXT NOT NULL,
+            oldValue TEXT,
+            newValue TEXT,
+            changedBy TEXT NOT NULL,
+            createdAt TEXT NOT NULL,
+            FOREIGN KEY (bookingId) REFERENCES bookings(id) ON DELETE CASCADE
+          )
+        ''');
+
         debugPrint("DB CREATE FINISHED");
       },
 
@@ -149,7 +236,6 @@ class AppDatabase {
               "ALTER TABLE product_logs ADD COLUMN changedBy TEXT",
             );
 
-            // llenar valores default
             await db.execute(
               "UPDATE product_logs SET changedBy = 'system' WHERE changedBy IS NULL",
             );
@@ -207,7 +293,6 @@ class AppDatabase {
             debugPrint("DB MIGRATION: Added newValue");
           }
 
-          // asegurar defaults para evitar NOT NULL
           await db.execute(
             "UPDATE product_logs SET changedBy = 'system' WHERE changedBy IS NULL",
           );
@@ -221,6 +306,97 @@ class AppDatabase {
           );
 
           debugPrint("DB MIGRATION: product_logs updated to full ERP schema");
+        }
+
+        // -------------------------
+        // MIGRATION: BOOKINGS MODULE (FULL RESET)
+        // -------------------------
+        if (oldVersion < 6) {
+          debugPrint("DB MIGRATION: Rebuilding bookings tables...");
+
+          await db.execute("DROP TABLE IF EXISTS booking_payments");
+          await db.execute("DROP TABLE IF EXISTS booking_logs");
+          await db.execute("DROP TABLE IF EXISTS bookings");
+
+          await db.execute('''
+            CREATE TABLE bookings (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+              bookingType TEXT NOT NULL,
+
+              celebrantFirstName TEXT NOT NULL,
+              celebrantLastName TEXT NOT NULL,
+              celebrantAge INTEGER NOT NULL,
+
+              guardianName TEXT NOT NULL,
+              customerPhone TEXT NOT NULL,
+
+              childCount INTEGER NOT NULL,
+
+              eventDate TEXT NOT NULL,
+              timeSlot TEXT NOT NULL,
+
+              fullAddress TEXT NOT NULL,
+
+              packageName TEXT NOT NULL,
+              packagePricePerChild REAL NOT NULL,
+
+              foodAdultsType TEXT,
+              foodAdultsCount INTEGER,
+              foodAdultsTotal REAL,
+
+              foodKidsType TEXT,
+              foodKidsCount INTEGER,
+              foodKidsTotal REAL,
+
+              decorationType TEXT,
+              decorationTotal REAL,
+
+              discountAmount REAL NOT NULL,
+
+              subtotalAmount REAL NOT NULL,
+              totalAmount REAL NOT NULL,
+
+              depositAmount REAL NOT NULL,
+
+              status TEXT NOT NULL,
+
+              notes TEXT,
+
+              createdAt TEXT NOT NULL,
+              createdBy TEXT NOT NULL
+            )
+          ''');
+
+          await db.execute('''
+            CREATE TABLE booking_payments (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              bookingId INTEGER NOT NULL,
+              amount REAL NOT NULL,
+              paymentDate TEXT NOT NULL,
+              createdAt TEXT NOT NULL,
+              createdBy TEXT NOT NULL,
+              note TEXT,
+              FOREIGN KEY (bookingId) REFERENCES bookings(id) ON DELETE CASCADE
+            )
+          ''');
+
+          await db.execute('''
+            CREATE TABLE booking_logs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              bookingId INTEGER NOT NULL,
+              action TEXT NOT NULL,
+              actionType TEXT NOT NULL,
+              fieldChanged TEXT NOT NULL,
+              oldValue TEXT,
+              newValue TEXT,
+              changedBy TEXT NOT NULL,
+              createdAt TEXT NOT NULL,
+              FOREIGN KEY (bookingId) REFERENCES bookings(id) ON DELETE CASCADE
+            )
+          ''');
+
+          debugPrint("DB MIGRATION: bookings tables recreated successfully.");
         }
       },
     );
@@ -321,84 +497,6 @@ class AppDatabase {
         "lastUpdatedAt": now,
         "lastUpdatedBy": "seed",
       },
-      {
-        "name": "Mascarillas Quirúrgicas",
-        "description": "Caja de mascarillas 50 unidades",
-        "categoryId": 1,
-        "brand": "MedProtect",
-        "supplier": "Proveedor Central",
-        "unitPrice": 2500.0,
-        "stockQuantity": 90.0,
-        "stockUnit": "box",
-        "minStockQuantity": 80.0,
-        "lastUpdatedAt": now,
-        "lastUpdatedBy": "seed",
-      },
-      {
-        "name": "Alcohol en Gel",
-        "description": "Botella de alcohol gel 500ml",
-        "categoryId": 1,
-        "brand": "CleanMax",
-        "supplier": "Farmacia Mayorista",
-        "unitPrice": 2200.0,
-        "stockQuantity": 25.0,
-        "stockUnit": "unit",
-        "minStockQuantity": 30.0,
-        "lastUpdatedAt": now,
-        "lastUpdatedBy": "seed",
-      },
-      {
-        "name": "Jabón Antibacterial",
-        "description": "Jabón líquido antibacterial",
-        "categoryId": 1,
-        "brand": "BioSafe",
-        "supplier": "Farmacia Mayorista",
-        "unitPrice": 1800.0,
-        "stockQuantity": 60.0,
-        "stockUnit": "unit",
-        "minStockQuantity": 40.0,
-        "lastUpdatedAt": now,
-        "lastUpdatedBy": "seed",
-      },
-      {
-        "name": "Gasas Esterilizadas",
-        "description": "Paquete de gasas esterilizadas",
-        "categoryId": 1,
-        "brand": "SterilPro",
-        "supplier": "Distribuidora Médica",
-        "unitPrice": 1200.0,
-        "stockQuantity": 15.0,
-        "stockUnit": "box",
-        "minStockQuantity": 20.0,
-        "lastUpdatedAt": now,
-        "lastUpdatedBy": "seed",
-      },
-      {
-        "name": "Termómetro Digital",
-        "description": "Termómetro digital portátil",
-        "categoryId": 1,
-        "brand": "ThermoPlus",
-        "supplier": "Proveedor Central",
-        "unitPrice": 4500.0,
-        "stockQuantity": 12.0,
-        "stockUnit": "unit",
-        "minStockQuantity": 10.0,
-        "lastUpdatedAt": now,
-        "lastUpdatedBy": "seed",
-      },
-      {
-        "name": "Toallas Desinfectantes",
-        "description": "Paquete de toallas desinfectantes",
-        "categoryId": 1,
-        "brand": "WipeClean",
-        "supplier": "Proveedor Central",
-        "unitPrice": 3000.0,
-        "stockQuantity": 18.0,
-        "stockUnit": "box",
-        "minStockQuantity": 25.0,
-        "lastUpdatedAt": now,
-        "lastUpdatedBy": "seed",
-      },
     ];
 
     for (final p in demoProducts) {
@@ -493,7 +591,7 @@ class AppDatabase {
   }
 
   // =========================
-  // LOGS (FULL ERP)
+  // PRODUCT LOGS (FULL ERP)
   // =========================
   Future<void> insertLog(
     Database db,
@@ -549,6 +647,65 @@ class AppDatabase {
       whereArgs: [actionType],
       orderBy: "createdAt DESC",
     );
+  }
+
+  // =========================
+  // BOOKINGS LOGS (ERP)
+  // =========================
+  Future<void> insertBookingLog(
+    Database db,
+    int bookingId,
+    String action, {
+    String actionType = "UPDATE",
+    String fieldChanged = "ALL",
+    String changedBy = "system",
+    String? oldValue,
+    String? newValue,
+  }) async {
+    await db.insert(
+      'booking_logs',
+      {
+        'bookingId': bookingId,
+        'action': action,
+        'actionType': actionType,
+        'fieldChanged': fieldChanged,
+        'oldValue': oldValue,
+        'newValue': newValue,
+        'changedBy': changedBy,
+        'createdAt': DateTime.now().toIso8601String(),
+      },
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getBookingLogs(
+    Database db,
+    int bookingId,
+  ) async {
+    return await db.query(
+      "booking_logs",
+      where: "bookingId = ?",
+      whereArgs: [bookingId],
+      orderBy: "createdAt DESC",
+    );
+  }
+
+  Future<double> getTotalPaymentsForBooking(
+    Database db,
+    int bookingId,
+  ) async {
+    final result = await db.rawQuery(
+      '''
+      SELECT SUM(amount) as total
+      FROM booking_payments
+      WHERE bookingId = ?
+      ''',
+      [bookingId],
+    );
+
+    final total = result.first["total"];
+    if (total == null) return 0.0;
+
+    return (total as num).toDouble();
   }
 
   // =========================
