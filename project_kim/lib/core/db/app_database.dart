@@ -23,7 +23,7 @@ class AppDatabase {
 
     return await openDatabase(
       path,
-      version: 6,
+      version: 7, // ⬅️ IMPORTANTE: subir versión
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -99,6 +99,8 @@ class AppDatabase {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
 
             bookingType TEXT NOT NULL, -- COTIZACION / RESERVACION
+
+            division TEXT NOT NULL, -- SPA / BABY / MOVIE
 
             celebrantFirstName TEXT NOT NULL,
             celebrantLastName TEXT NOT NULL,
@@ -324,6 +326,8 @@ class AppDatabase {
 
               bookingType TEXT NOT NULL,
 
+              division TEXT NOT NULL,
+
               celebrantFirstName TEXT NOT NULL,
               celebrantLastName TEXT NOT NULL,
               celebrantAge INTEGER NOT NULL,
@@ -397,6 +401,25 @@ class AppDatabase {
           ''');
 
           debugPrint("DB MIGRATION: bookings tables recreated successfully.");
+        }
+
+        // -------------------------
+        // MIGRATION: ADD division COLUMN (SAFE)
+        // -------------------------
+        if (oldVersion < 7) {
+          debugPrint("DB MIGRATION: Adding division column to bookings...");
+
+          final columns = await db.rawQuery("PRAGMA table_info(bookings)");
+          final hasDivision =
+              columns.any((c) => c["name"].toString() == "division");
+
+          if (!hasDivision) {
+            await db.execute(
+              "ALTER TABLE bookings ADD COLUMN division TEXT NOT NULL DEFAULT 'SPA'",
+            );
+
+            debugPrint("DB MIGRATION: division column added successfully.");
+          }
         }
       },
     );
