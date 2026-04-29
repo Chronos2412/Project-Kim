@@ -1,49 +1,44 @@
 name: project_kim
-description: ERP / Sistema de gestión para Experiencias 360°
-publish_to: 'none'
+description: ERP y sistema de reservaciones para Experiencias 360°
+publish_to: "none"
 
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.4.0 <4.0.0"
+  sdk: ">=3.3.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
 
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^1.0.6
 
-  # DATABASE
+  # DB
   sqflite: ^2.3.3+1
   path: ^1.9.0
 
-  # UI / HELPERS
+  # UI / Utils
   intl: ^0.19.0
 
-  # EXPORT EXCEL
-  excel: ^4.0.6
-
-  # EXPORT PDF
-  pdf: ^3.11.1
-  printing: ^5.13.4
-
-  # FILE PICKER (save as)
+  # PDF / Export
+  pdf: ^3.10.8
+  printing: ^5.13.1
+  excel: ^4.0.3
   file_selector: ^1.0.3
-
-  # FILE PATHS
-  path_provider: ^2.1.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  flutter_lints: ^4.0.0
+  flutter_lints: ^3.0.0
 
 flutter:
   uses-material-design: true
 
   assets:
     - assets/logo_experiencias360.jpg
+    - assets/logos/
+    - assets/fonts/
 
   fonts:
     - family: NotoSans
