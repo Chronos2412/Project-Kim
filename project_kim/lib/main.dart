@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:project_kim/core/theme/app_theme.dart';
-import 'package:project_kim/features/home/presentation/screens/home_screen.dart';
+import 'package:project_kim/core/presentation/screens/splash_screen.dart';
 
 void main() {
   runApp(const ProjectKimApp());
@@ -11,11 +10,10 @@ class ProjectKimApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: "Project Kim",
+    return const MaterialApp(
+      title: "Experiencias 360",
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      home: const HomeScreen(),
+      home: SplashScreen(),
     );
   }
 }

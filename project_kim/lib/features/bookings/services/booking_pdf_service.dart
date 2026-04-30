@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
@@ -29,18 +28,17 @@ class BookingPdfService {
 
   static Future<Uint8List> generateBookingPdf({
     required Map<String, dynamic> bookingData,
-    double paymentsTotal = 0.0, // opcional
   }) async {
     final pdf = pw.Document();
 
     final logoBytes = await rootBundle.load("assets/logo_experiencias360.jpg");
     final logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
 
-    // Fuentes NotoSans (para ₡, ñ, etc)
     final fontRegular = await PdfGoogleFonts.notoSansRegular();
     final fontBold = await PdfGoogleFonts.notoSansBold();
 
-    final bookingType = (bookingData["bookingType"] ?? "COTIZACION").toString();
+    final bookingType = bookingData["bookingType"] ?? "COTIZACION";
+    final division = bookingData["division"] ?? "Spa Party";
 
     final celebrantFirst = bookingData["celebrantFirstName"] ?? "";
     final celebrantLast = bookingData["celebrantLastName"] ?? "";
@@ -50,8 +48,6 @@ class BookingPdfService {
     final phone = bookingData["customerPhone"] ?? "";
 
     final childCount = bookingData["childCount"] ?? 0;
-
-    final billableChildCount = childCount < 5 ? 5 : childCount;
 
     final eventDateRaw = bookingData["eventDate"] ?? "";
     final eventDate = DateTime.tryParse(eventDateRaw) ?? DateTime.now();
@@ -65,16 +61,6 @@ class BookingPdfService {
     final packageName = bookingData["packageName"] ?? "";
     final packagePricePerChild =
         (bookingData["packagePricePerChild"] as num?)?.toDouble() ?? 0.0;
-
-    final foodAdultsType = bookingData["foodAdultsType"] ?? "No";
-    final foodAdultsCount = bookingData["foodAdultsCount"] ?? 0;
-    final foodAdultsTotal =
-        (bookingData["foodAdultsTotal"] as num?)?.toDouble() ?? 0.0;
-
-    final foodKidsType = bookingData["foodKidsType"] ?? "No";
-    final foodKidsCount = bookingData["foodKidsCount"] ?? 0;
-    final foodKidsTotal =
-        (bookingData["foodKidsTotal"] as num?)?.toDouble() ?? 0.0;
 
     final decorationType = bookingData["decorationType"] ?? "No";
     final decorationTotal =
@@ -94,13 +80,7 @@ class BookingPdfService {
 
     final notes = bookingData["notes"] ?? "";
 
-    final minDeposit = totalAmount * 0.30;
-
-    final pendingAmount = totalAmount - depositAmount - paymentsTotal;
-
-    final pendingFixed = pendingAmount < 0 ? 0.0 : pendingAmount;
-
-    final packageTotal = packagePricePerChild * billableChildCount;
+    final pendingAmount = totalAmount - depositAmount;
 
     // =========================
     // PACKAGE DETAILS
@@ -149,6 +129,8 @@ Incluye:
 Paquete mínimo: 5 niñ@s
 Precio por niñ@: ₡25,000
 """;
+    } else {
+      packageDetails = "Detalles no disponibles para este paquete.";
     }
 
     // =========================
@@ -209,57 +191,6 @@ Precio: ₡50,000
     final now = DateTime.now();
     final nowText = DateFormat("dd/MM/yyyy HH:mm").format(now);
 
-    // =========================
-    // HELPERS PDF
-    // =========================
-    pw.Widget _sectionTitle(String text) {
-      return pw.Padding(
-        padding: const pw.EdgeInsets.only(top: 10, bottom: 6),
-        child: pw.Text(
-          text,
-          style: pw.TextStyle(
-            font: fontBold,
-            fontSize: 14,
-            color: PdfColors.blueGrey900,
-          ),
-        ),
-      );
-    }
-
-    pw.Widget _line(String label, String value, {bool bold = false}) {
-      return pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(vertical: 2),
-        child: pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Expanded(
-              flex: 4,
-              child: pw.Text(
-                label,
-                style: pw.TextStyle(
-                  font: fontBold,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-            pw.Expanded(
-              flex: 6,
-              child: pw.Text(
-                value,
-                style: pw.TextStyle(
-                  font: bold ? fontBold : fontRegular,
-                  fontSize: 10,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // =========================
-    // PDF PAGE
-    // =========================
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -280,7 +211,6 @@ Precio: ₡50,000
         },
         build: (context) {
           return [
-            // HEADER
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
@@ -297,24 +227,29 @@ Precio: ₡50,000
                     ),
                     pw.SizedBox(height: 4),
                     pw.Text(
-                      bookingType.toUpperCase() == "COTIZACION"
+                      bookingType == "COTIZACION"
                           ? "COTIZACIÓN"
                           : "RESERVACIÓN",
                       style: pw.TextStyle(
                         font: fontBold,
                         fontSize: 14,
-                        color: PdfColors.blueGrey700,
+                      ),
+                    ),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                      "División: $division",
+                      style: pw.TextStyle(
+                        font: fontRegular,
+                        fontSize: 11,
                       ),
                     ),
                   ],
                 )
               ],
             ),
-
-            pw.SizedBox(height: 10),
+            pw.SizedBox(height: 14),
             pw.Divider(),
-
-            // TITLE
+            pw.SizedBox(height: 8),
             pw.Text(
               "Fiesta de $celebrantFirst $celebrantLast",
               style: pw.TextStyle(
@@ -322,95 +257,152 @@ Precio: ₡50,000
                 fontSize: 16,
               ),
             ),
-
             pw.SizedBox(height: 6),
-
-            _line("Edad", "$celebrantAge años"),
-            _line("Encargado", guardianName),
-            _line("Teléfono", phone),
-            _line("Fecha", formattedDate),
-            _line("Horario", timeSlotLabel),
-            _line("Dirección", fullAddress),
-
-            // PACKAGE
-            _sectionTitle("Paquete seleccionado"),
-            _line("Paquete", packageName),
-            _line("Cantidad real de niñ@s", "$childCount"),
-            _line("Cantidad facturada (mínimo 5)", "$billableChildCount"),
-            _line("Precio por niñ@", _formatMoney(packagePricePerChild)),
-            _line("Total paquete", _formatMoney(packageTotal), bold: true),
-
+            pw.Text(
+              "Edad: $celebrantAge años",
+              style: pw.TextStyle(font: fontRegular),
+            ),
+            pw.Text(
+              "Encargado: $guardianName",
+              style: pw.TextStyle(font: fontRegular),
+            ),
+            pw.Text(
+              "Teléfono: $phone",
+              style: pw.TextStyle(font: fontRegular),
+            ),
+            pw.SizedBox(height: 8),
+            pw.Text(
+              "Fecha: $formattedDate",
+              style: pw.TextStyle(font: fontRegular),
+            ),
+            pw.Text(
+              "Horario: $timeSlotLabel",
+              style: pw.TextStyle(font: fontRegular),
+            ),
+            pw.SizedBox(height: 8),
+            pw.Text(
+              "Dirección: $fullAddress",
+              style: pw.TextStyle(font: fontRegular),
+            ),
+            pw.SizedBox(height: 16),
+            pw.Text(
+              "Paquete seleccionado",
+              style: pw.TextStyle(
+                font: fontBold,
+                fontSize: 14,
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              "Paquete: $packageName",
+              style: pw.TextStyle(font: fontRegular),
+            ),
+            pw.Text(
+              "Cantidad de niñ@s: $childCount",
+              style: pw.TextStyle(font: fontRegular),
+            ),
+            pw.Text(
+              "Precio por niñ@: ${_formatMoney(packagePricePerChild)}",
+              style: pw.TextStyle(font: fontRegular),
+            ),
+            pw.Text(
+              "Total paquete: ${_formatMoney(packagePricePerChild * childCount)}",
+              style: pw.TextStyle(font: fontRegular),
+            ),
             pw.SizedBox(height: 6),
             pw.Text(
               packageDetails,
-              style: pw.TextStyle(font: fontRegular, fontSize: 10),
+              style: pw.TextStyle(font: fontRegular),
             ),
-
-            // FOOD
-            _sectionTitle("Alimentación"),
-            _line(
-              "Adultos",
-              "$foodAdultsType ($foodAdultsCount personas) - Total: ${_formatMoney(foodAdultsTotal)}",
+            pw.SizedBox(height: 12),
+            pw.Text(
+              "Decoración",
+              style: pw.TextStyle(
+                font: fontBold,
+                fontSize: 14,
+              ),
             ),
-            _line(
-              "Niñ@s",
-              "$foodKidsType ($foodKidsCount personas) - Total: ${_formatMoney(foodKidsTotal)}",
+            pw.SizedBox(height: 4),
+            pw.Text(
+              "Tipo: $decorationType",
+              style: pw.TextStyle(font: fontRegular),
             ),
-
-            // DECORATION
-            _sectionTitle("Decoración"),
-            _line("Tipo", decorationType),
-            _line("Costo", _formatMoney(decorationTotal), bold: true),
-
+            pw.Text(
+              "Costo: ${_formatMoney(decorationTotal)}",
+              style: pw.TextStyle(font: fontRegular),
+            ),
             pw.SizedBox(height: 6),
             pw.Text(
               decorationDetails,
-              style: pw.TextStyle(font: fontRegular, fontSize: 10),
+              style: pw.TextStyle(font: fontRegular),
             ),
-
-            // TOTALS
-            _sectionTitle("Resumen de costos"),
-            _line("Subtotal", _formatMoney(subtotalAmount)),
-            _line("Descuento", _formatMoney(discountAmount)),
-            _line("TOTAL", _formatMoney(totalAmount), bold: true),
-
+            pw.SizedBox(height: 12),
+            pw.Text(
+              "Resumen de costos",
+              style: pw.TextStyle(
+                font: fontBold,
+                fontSize: 14,
+              ),
+            ),
             pw.SizedBox(height: 6),
-            _line(
-              "Adelanto mínimo requerido (30%)",
-              _formatMoney(minDeposit),
-              bold: true,
+            pw.Text(
+              "Subtotal: ${_formatMoney(subtotalAmount)}",
+              style: pw.TextStyle(font: fontRegular),
             ),
-            _line(
-              "Adelanto recibido",
-              _formatMoney(depositAmount),
+            pw.Text(
+              "Descuento: ${_formatMoney(discountAmount)}",
+              style: pw.TextStyle(font: fontRegular),
             ),
-            _line(
-              "Pagos adicionales",
-              _formatMoney(paymentsTotal),
+            pw.SizedBox(height: 6),
+            pw.Text(
+              "TOTAL: ${_formatMoney(totalAmount)}",
+              style: pw.TextStyle(
+                font: fontBold,
+                fontSize: 15,
+              ),
             ),
-            _line(
-              "Saldo pendiente",
-              _formatMoney(pendingFixed),
-              bold: true,
+            pw.SizedBox(height: 6),
+            pw.Text(
+              "Depósito recomendado (30%): ${_formatMoney(totalAmount * 0.30)}",
+              style: pw.TextStyle(font: fontBold),
             ),
-
-            // NOTES
+            pw.Text(
+              "Depósito registrado: ${_formatMoney(depositAmount)}",
+              style: pw.TextStyle(font: fontRegular),
+            ),
+            pw.Text(
+              "Saldo pendiente: ${_formatMoney(pendingAmount)}",
+              style: pw.TextStyle(font: fontRegular),
+            ),
+            pw.SizedBox(height: 12),
             if (notes.toString().trim().isNotEmpty) ...[
-              _sectionTitle("Observaciones"),
+              pw.Text(
+                "Observaciones",
+                style: pw.TextStyle(
+                  font: fontBold,
+                  fontSize: 14,
+                ),
+              ),
+              pw.SizedBox(height: 4),
               pw.Text(
                 notes,
-                style: pw.TextStyle(font: fontRegular, fontSize: 10),
+                style: pw.TextStyle(font: fontRegular),
               ),
+              pw.SizedBox(height: 12),
             ],
-
-            // POLICIES
-            _sectionTitle("Políticas de servicio"),
+            pw.Text(
+              "Políticas de servicio",
+              style: pw.TextStyle(
+                font: fontBold,
+                fontSize: 14,
+              ),
+            ),
+            pw.SizedBox(height: 6),
             pw.Text(
               policies,
-              style: pw.TextStyle(font: fontRegular, fontSize: 10),
+              style: pw.TextStyle(font: fontRegular),
             ),
-
-            pw.SizedBox(height: 12),
+            pw.SizedBox(height: 14),
             pw.Text(
               "Al contratar el servicio, el cliente acepta todas las políticas anteriores.",
               style: pw.TextStyle(

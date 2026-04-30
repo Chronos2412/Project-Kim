@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:project_kim/core/db/app_database.dart';
-import 'package:project_kim/features/bookings/presentation/screens/booking_detail_screen.dart';
 import 'package:project_kim/features/bookings/presentation/screens/booking_form_screen.dart';
+import 'package:project_kim/features/bookings/presentation/screens/booking_detail_screen.dart';
 
 class BookingsScreen extends StatefulWidget {
   const BookingsScreen({super.key});
@@ -47,17 +47,14 @@ class _BookingsScreenState extends State<BookingsScreen> {
         SELECT *
         FROM bookings
         WHERE 
-          LOWER(celebrantFirstName) LIKE ?
-          OR LOWER(celebrantLastName) LIKE ?
-          OR LOWER(guardianName) LIKE ?
+          LOWER(guardianName) LIKE ?
           OR LOWER(customerPhone) LIKE ?
           OR LOWER(packageName) LIKE ?
           OR LOWER(fullAddress) LIKE ?
+          OR LOWER(division) LIKE ?
         ORDER BY eventDate DESC
-      ''', [like, like, like, like, like, like]);
+      ''', [like, like, like, like, like]);
     }
-
-    if (!mounted) return;
 
     setState(() {
       _bookings = results;
@@ -66,7 +63,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
   }
 
   int _countByStatus(String status) {
-    return _bookings.where((b) => (b["status"] ?? "") == status).length;
+    return _bookings.where((b) => b["status"] == status).length;
   }
 
   Widget _buildKpiCard(String title, int value, IconData icon) {
@@ -109,21 +106,6 @@ class _BookingsScreenState extends State<BookingsScreen> {
     return DateFormat("dd/MM/yyyy").format(date);
   }
 
-  String _buildTitle(Map<String, dynamic> booking) {
-    final first = (booking["celebrantFirstName"] ?? "").toString();
-    final last = (booking["celebrantLastName"] ?? "").toString();
-
-    final full = "$first $last".trim();
-    if (full.isEmpty) return "Sin nombre";
-
-    return full;
-  }
-
-  bool _isCotizacion(Map<String, dynamic> booking) {
-    final type = (booking["bookingType"] ?? "RESERVACION").toString();
-    return type.toUpperCase() == "COTIZACION";
-  }
-
   @override
   Widget build(BuildContext context) {
     final pendientes = _countByStatus("Pendiente");
@@ -135,7 +117,6 @@ class _BookingsScreenState extends State<BookingsScreen> {
         title: const Text("Eventos"),
         actions: [
           IconButton(
-            tooltip: "Actualizar",
             onPressed: _loadBookings,
             icon: const Icon(Icons.refresh),
           ),
@@ -161,9 +142,6 @@ class _BookingsScreenState extends State<BookingsScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // ==========================
-            // KPI CARDS
-            // ==========================
             Row(
               children: [
                 _buildKpiCard("Pendientes", pendientes, Icons.pending_actions),
@@ -173,16 +151,11 @@ class _BookingsScreenState extends State<BookingsScreen> {
                 _buildKpiCard("Pagadas", pagadas, Icons.paid),
               ],
             ),
-
             const SizedBox(height: 16),
-
-            // ==========================
-            // SEARCH
-            // ==========================
             TextField(
               decoration: InputDecoration(
                 labelText: "Buscar evento",
-                hintText: "Cumpleañer@, encargado, teléfono, paquete o dirección",
+                hintText: "Encargado, teléfono, paquete, dirección o división",
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -193,12 +166,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
                 _loadBookings();
               },
             ),
-
             const SizedBox(height: 16),
-
-            // ==========================
-            // LIST
-            // ==========================
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
@@ -213,23 +181,18 @@ class _BookingsScreenState extends State<BookingsScreen> {
 
                             final total =
                                 (booking["totalAmount"] as num).toDouble();
-
                             final deposit =
                                 (booking["depositAmount"] as num).toDouble();
 
-                            final typeLabel =
-                                _isCotizacion(booking) ? "Cotización" : "Reservación";
+                            final division =
+                                (booking["division"] ?? "Sin división").toString();
 
                             return Card(
                               elevation: 2,
                               child: ListTile(
-                                leading: Icon(
-                                  _isCotizacion(booking)
-                                      ? Icons.description
-                                      : Icons.event_note,
-                                ),
+                                leading: const Icon(Icons.event_note),
                                 title: Text(
-                                  _buildTitle(booking),
+                                  booking["guardianName"] ?? "",
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -237,13 +200,13 @@ class _BookingsScreenState extends State<BookingsScreen> {
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text("📄 Tipo: $typeLabel"),
+                                    Text("📌 División: $division"),
                                     Text(
-                                      "📅 ${_formatDate(booking["eventDate"])} • ⏰ ${booking["timeSlot"]}",
+                                      "📅 ${_formatDate(booking["eventDate"])} • 📍 ${booking["fullAddress"]}",
                                     ),
                                     Text("🎁 Paquete: ${booking["packageName"]}"),
                                     Text(
-                                      "Total: ${_formatCurrency(total)} | Adelanto: ${_formatCurrency(deposit)}",
+                                      "Total: ${_formatCurrency(total)} | Depósito: ${_formatCurrency(deposit)}",
                                     ),
                                   ],
                                 ),
@@ -260,9 +223,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
                                                 ? Colors.blue
                                                 : booking["status"] == "Pagada"
                                                     ? Colors.green
-                                                    : booking["status"] == "Cancelada"
-                                                        ? Colors.red
-                                                        : Colors.grey,
+                                                    : Colors.grey,
                                       ),
                                     ),
                                     const SizedBox(height: 4),

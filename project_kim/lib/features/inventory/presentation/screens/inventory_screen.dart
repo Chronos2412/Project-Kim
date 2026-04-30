@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:excel/excel.dart';
 
 import 'package:project_kim/core/db/app_database.dart';
 import 'package:project_kim/features/inventory/data/models/product_model.dart';
