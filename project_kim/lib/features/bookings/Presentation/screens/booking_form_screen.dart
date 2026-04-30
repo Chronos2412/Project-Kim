@@ -18,6 +18,8 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   final AppDatabase _db = AppDatabase();
   final _formKey = GlobalKey<FormState>();
 
+  int _currentStep = 0;
+
   // =========================
   // FORM FIELDS
   // =========================
@@ -101,21 +103,6 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
     return DateFormat("dd/MM/yyyy").format(date);
   }
 
-  String _timeSlotLabel(String slot) {
-    switch (slot) {
-      case "9am-12pm":
-        return "9:00 a.m. - 12:00 p.m.";
-      case "10am-1pm":
-        return "10:00 a.m. - 1:00 p.m.";
-      case "2pm-5pm":
-        return "2:00 p.m. - 5:00 p.m.";
-      case "3pm-6pm":
-        return "3:00 p.m. - 6:00 p.m.";
-      default:
-        return slot;
-    }
-  }
-
   void _recalculateTotals() {
     final packageTotal = _packagePricePerChild * _childCount;
 
@@ -123,22 +110,77 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
         packageTotal + _foodAdultsTotal + _foodKidsTotal + _decorationTotal;
 
     final total = subtotal - _discountAmount;
+    final safeTotal = total < 0 ? 0.0 : total.toDouble();
 
-    // IMPORTANTE: usar 0.0 para que safeTotal sea double
-    final safeTotal = total < 0 ? 0.0 : total;
-
-    // depósito mínimo recomendado 30%
     final recommendedDeposit = safeTotal * 0.30;
 
     setState(() {
-      _subtotalAmount = subtotal;
+      _subtotalAmount = subtotal.toDouble();
       _totalAmount = safeTotal;
 
-      // Si el usuario no ha tocado depósito o está en 0, lo ajustamos recomendado
       if (_depositAmount <= 0) {
         _depositAmount = recommendedDeposit;
       }
     });
+  }
+
+  // =========================
+  // VALIDATION BY STEP
+  // =========================
+  bool _validateStep(int step) {
+    if (step == 0) {
+      if (_bookingType.trim().isEmpty) return false;
+      if (_division.trim().isEmpty) return false;
+      return true;
+    }
+
+    if (step == 1) {
+      if (_celebrantFirstName.trim().isEmpty) return false;
+      if (_celebrantLastName.trim().isEmpty) return false;
+      if (_celebrantAge <= 0) return false;
+      if (_guardianName.trim().isEmpty) return false;
+      if (_customerPhone.trim().isEmpty) return false;
+      return true;
+    }
+
+    if (step == 2) {
+      if (_eventDate == null) return false;
+      if (_timeSlot.trim().isEmpty) return false;
+      if (_fullAddress.trim().isEmpty) return false;
+      return true;
+    }
+
+    if (step == 3) {
+      if (_childCount < 5) return false;
+      if (_packageName.trim().isEmpty) return false;
+      if (_totalAmount <= 0) return false;
+      return true;
+    }
+
+    return true;
+  }
+
+  void _nextStep() {
+    final isValid = _validateStep(_currentStep);
+
+    if (!isValid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Debes completar los campos requeridos antes de continuar."),
+        ),
+      );
+      return;
+    }
+
+    if (_currentStep < 4) {
+      setState(() => _currentStep++);
+    }
+  }
+
+  void _prevStep() {
+    if (_currentStep > 0) {
+      setState(() => _currentStep--);
+    }
   }
 
   // =========================
@@ -204,6 +246,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
   // =========================
   Future<void> _saveBooking() async {
     if (!_formKey.currentState!.validate()) return;
+
     if (_eventDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Debes seleccionar una fecha.")),
@@ -236,46 +279,31 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
       final data = {
         "bookingType": _bookingType,
         "division": _division,
-
         "celebrantFirstName": _celebrantFirstName.trim(),
         "celebrantLastName": _celebrantLastName.trim(),
         "celebrantAge": _celebrantAge,
-
         "guardianName": _guardianName.trim(),
         "customerPhone": _customerPhone.trim(),
-
         "childCount": _childCount,
-
         "eventDate": eventDateIso,
         "timeSlot": _timeSlot,
-
         "fullAddress": _fullAddress.trim(),
-
         "packageName": _packageName.trim(),
         "packagePricePerChild": _packagePricePerChild,
-
         "foodAdultsType": _foodAdultsType,
         "foodAdultsCount": _foodAdultsCount,
         "foodAdultsTotal": _foodAdultsTotal,
-
         "foodKidsType": _foodKidsType,
         "foodKidsCount": _foodKidsCount,
         "foodKidsTotal": _foodKidsTotal,
-
         "decorationType": _decorationType,
         "decorationTotal": _decorationTotal,
-
         "discountAmount": _discountAmount,
-
         "subtotalAmount": _subtotalAmount,
         "totalAmount": _totalAmount,
-
         "depositAmount": _depositAmount,
-
         "status": "Pendiente",
-
         "notes": _notes.trim(),
-
         "createdAt": now,
         "createdBy": "system",
       };
@@ -346,14 +374,43 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
               key: _formKey,
               child: Stepper(
                 type: StepperType.vertical,
-                currentStep: 0,
+                currentStep: _currentStep,
+                onStepContinue: _nextStep,
+                onStepCancel: _prevStep,
                 controlsBuilder: (context, details) {
-                  return const SizedBox.shrink();
+                  final isLast = _currentStep == 4;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: Row(
+                      children: [
+                        if (_currentStep > 0)
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: details.onStepCancel,
+                              child: const Text("Atrás"),
+                            ),
+                          ),
+                        if (_currentStep > 0) const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: isLast ? _saveBooking : details.onStepContinue,
+                            child: Text(isLast
+                                ? (isEditing ? "Guardar cambios" : "Guardar evento")
+                                : "Siguiente"),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
                 },
                 steps: [
                   Step(
                     title: const Text("Tipo y División"),
-                    isActive: true,
+                    isActive: _currentStep >= 0,
+                    state: _currentStep > 0
+                        ? StepState.complete
+                        : StepState.indexed,
                     content: Column(
                       children: [
                         DropdownButtonFormField<String>(
@@ -415,7 +472,10 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                   ),
                   Step(
                     title: const Text("Cumpleañer@ y Encargado"),
-                    isActive: true,
+                    isActive: _currentStep >= 1,
+                    state: _currentStep > 1
+                        ? StepState.complete
+                        : StepState.indexed,
                     content: Column(
                       children: [
                         TextFormField(
@@ -485,7 +545,10 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                   ),
                   Step(
                     title: const Text("Evento"),
-                    isActive: true,
+                    isActive: _currentStep >= 2,
+                    state: _currentStep > 2
+                        ? StepState.complete
+                        : StepState.indexed,
                     content: Column(
                       children: [
                         Row(
@@ -563,7 +626,10 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                   ),
                   Step(
                     title: const Text("Paquete y Servicios"),
-                    isActive: true,
+                    isActive: _currentStep >= 3,
+                    state: _currentStep > 3
+                        ? StepState.complete
+                        : StepState.indexed,
                     content: Column(
                       children: [
                         TextFormField(
@@ -585,11 +651,10 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                           },
                         ),
                         const SizedBox(height: 12),
-
                         DropdownButtonFormField<String>(
                           value: _packageName.isEmpty ? null : _packageName,
                           decoration: InputDecoration(
-                            labelText: "Paquete (${_division})",
+                            labelText: "Paquete ($_division)",
                             border: const OutlineInputBorder(),
                           ),
                           items: _availablePackages.map((p) {
@@ -617,12 +682,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                             _recalculateTotals();
                           },
                         ),
-
                         const SizedBox(height: 12),
-
-                        // ======================
-                        // DECORACION
-                        // ======================
                         DropdownButtonFormField<String>(
                           value: _decorationType,
                           decoration: const InputDecoration(
@@ -651,12 +711,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                             _recalculateTotals();
                           },
                         ),
-
                         const SizedBox(height: 12),
-
-                        // ======================
-                        // DESCUENTO
-                        // ======================
                         TextFormField(
                           initialValue: _discountAmount.toStringAsFixed(0),
                           keyboardType: TextInputType.number,
@@ -669,12 +724,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                             _recalculateTotals();
                           },
                         ),
-
                         const SizedBox(height: 12),
-
-                        // ======================
-                        // DEPOSITO
-                        // ======================
                         TextFormField(
                           initialValue: _depositAmount.toStringAsFixed(0),
                           keyboardType: TextInputType.number,
@@ -688,9 +738,7 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                             });
                           },
                         ),
-
                         const SizedBox(height: 14),
-
                         Card(
                           elevation: 2,
                           child: Padding(
@@ -728,7 +776,10 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                   ),
                   Step(
                     title: const Text("Observaciones y Guardar"),
-                    isActive: true,
+                    isActive: _currentStep >= 4,
+                    state: _currentStep == 4
+                        ? StepState.indexed
+                        : StepState.disabled,
                     content: Column(
                       children: [
                         TextFormField(
@@ -747,7 +798,9 @@ class _BookingFormScreenState extends State<BookingFormScreen> {
                           child: ElevatedButton.icon(
                             onPressed: _saveBooking,
                             icon: const Icon(Icons.save),
-                            label: Text(isEditing ? "Guardar cambios" : "Guardar evento"),
+                            label: Text(
+                              isEditing ? "Guardar cambios" : "Guardar evento",
+                            ),
                           ),
                         ),
                       ],

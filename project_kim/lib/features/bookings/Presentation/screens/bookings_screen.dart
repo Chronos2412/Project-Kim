@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:project_kim/core/db/app_database.dart';
-import 'package:project_kim/features/bookings/presentation/screens/booking_form_screen.dart';
 import 'package:project_kim/features/bookings/presentation/screens/booking_detail_screen.dart';
+import 'package:project_kim/features/bookings/presentation/screens/booking_form_screen.dart';
 
 class BookingsScreen extends StatefulWidget {
   const BookingsScreen({super.key});
@@ -16,7 +16,6 @@ class _BookingsScreenState extends State<BookingsScreen> {
 
   List<Map<String, dynamic>> _bookings = [];
   String _search = "";
-
   bool _loading = true;
 
   @override
@@ -47,13 +46,15 @@ class _BookingsScreenState extends State<BookingsScreen> {
         SELECT *
         FROM bookings
         WHERE 
-          LOWER(guardianName) LIKE ?
+          LOWER(celebrantFirstName) LIKE ?
+          OR LOWER(celebrantLastName) LIKE ?
+          OR LOWER(guardianName) LIKE ?
           OR LOWER(customerPhone) LIKE ?
           OR LOWER(packageName) LIKE ?
           OR LOWER(fullAddress) LIKE ?
           OR LOWER(division) LIKE ?
         ORDER BY eventDate DESC
-      ''', [like, like, like, like, like]);
+      ''', [like, like, like, like, like, like, like]);
     }
 
     setState(() {
@@ -63,7 +64,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
   }
 
   int _countByStatus(String status) {
-    return _bookings.where((b) => b["status"] == status).length;
+    return _bookings.where((b) => (b["status"] ?? "") == status).length;
   }
 
   Widget _buildKpiCard(String title, int value, IconData icon) {
@@ -102,8 +103,14 @@ class _BookingsScreenState extends State<BookingsScreen> {
   }
 
   String _formatDate(String isoDate) {
-    final date = DateTime.parse(isoDate);
+    final date = DateTime.tryParse(isoDate);
+    if (date == null) return isoDate;
     return DateFormat("dd/MM/yyyy").format(date);
+  }
+
+  bool _isCotizacion(Map<String, dynamic> booking) {
+    final type = (booking["bookingType"] ?? "RESERVACION").toString();
+    return type.toUpperCase() == "COTIZACION";
   }
 
   @override
@@ -155,7 +162,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
             TextField(
               decoration: InputDecoration(
                 labelText: "Buscar evento",
-                hintText: "Encargado, teléfono, paquete, dirección o división",
+                hintText: "Nombre, teléfono, paquete, dirección o división",
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -180,19 +187,25 @@ class _BookingsScreenState extends State<BookingsScreen> {
                             final booking = _bookings[index];
 
                             final total =
-                                (booking["totalAmount"] as num).toDouble();
+                                (booking["totalAmount"] as num?)?.toDouble() ??
+                                    0.0;
                             final deposit =
-                                (booking["depositAmount"] as num).toDouble();
+                                (booking["depositAmount"] as num?)?.toDouble() ??
+                                    0.0;
 
-                            final division =
-                                (booking["division"] ?? "Sin división").toString();
+                            final typeLabel =
+                                _isCotizacion(booking) ? "Cotización" : "Reservación";
 
                             return Card(
                               elevation: 2,
                               child: ListTile(
-                                leading: const Icon(Icons.event_note),
+                                leading: Icon(
+                                  _isCotizacion(booking)
+                                      ? Icons.description
+                                      : Icons.event_note,
+                                ),
                                 title: Text(
-                                  booking["guardianName"] ?? "",
+                                  "${booking["celebrantFirstName"] ?? ""} ${booking["celebrantLastName"] ?? ""}",
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -200,11 +213,11 @@ class _BookingsScreenState extends State<BookingsScreen> {
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text("📌 División: $division"),
+                                    Text("📌 $typeLabel • 🏷 ${booking["division"] ?? ""}"),
                                     Text(
-                                      "📅 ${_formatDate(booking["eventDate"])} • 📍 ${booking["fullAddress"]}",
+                                      "📅 ${_formatDate(booking["eventDate"] ?? "")}",
                                     ),
-                                    Text("🎁 Paquete: ${booking["packageName"]}"),
+                                    Text("🎁 Paquete: ${booking["packageName"] ?? ""}"),
                                     Text(
                                       "Total: ${_formatCurrency(total)} | Depósito: ${_formatCurrency(deposit)}",
                                     ),
@@ -223,7 +236,10 @@ class _BookingsScreenState extends State<BookingsScreen> {
                                                 ? Colors.blue
                                                 : booking["status"] == "Pagada"
                                                     ? Colors.green
-                                                    : Colors.grey,
+                                                    : booking["status"] ==
+                                                            "Cancelada"
+                                                        ? Colors.red
+                                                        : Colors.grey,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
@@ -235,7 +251,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
                                     context,
                                     MaterialPageRoute(
                                       builder: (_) => BookingDetailScreen(
-                                        bookingId: booking["id"],
+                                        bookingId: booking["id"] as int,
                                       ),
                                     ),
                                   );

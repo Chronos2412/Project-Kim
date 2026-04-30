@@ -35,7 +35,8 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
   }
 
   String _formatDate(String isoDate) {
-    final date = DateTime.parse(isoDate);
+    final date = DateTime.tryParse(isoDate);
+    if (date == null) return isoDate;
     return DateFormat("dd/MM/yyyy").format(date);
   }
 
@@ -52,6 +53,11 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
       default:
         return slot;
     }
+  }
+
+  bool _isCotizacion() {
+    final type = (_booking?["bookingType"] ?? "RESERVACION").toString();
+    return type.toUpperCase() == "COTIZACION";
   }
 
   Future<void> _loadBooking() async {
@@ -84,68 +90,25 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
     });
   }
 
-  bool _isCotizacion() {
-    final type = (_booking?["bookingType"] ?? "RESERVACION").toString();
-    return type.toUpperCase() == "COTIZACION";
-  }
-
-  double _getTotalAmount() {
-    if (_booking == null) return 0.0;
-    return (_booking!["totalAmount"] as num?)?.toDouble() ?? 0.0;
-  }
-
-  double _getDepositAmount() {
-    if (_booking == null) return 0.0;
-    return (_booking!["depositAmount"] as num?)?.toDouble() ?? 0.0;
-  }
-
-  double _getMinDeposit30() {
-    final total = _getTotalAmount();
-    return total * 0.30;
-  }
-
-  bool _isLogisticsReady() {
-    if (_booking == null) return false;
-    if (_isCotizacion()) return false;
-
-    final deposit = _getDepositAmount();
-    final minDeposit = _getMinDeposit30();
-
-    return deposit >= minDeposit;
-  }
-
-  double _getMissingFor30() {
-    final deposit = _getDepositAmount();
-    final minDeposit = _getMinDeposit30();
-
-    final missing = minDeposit - deposit;
-    return missing < 0 ? 0 : missing;
-  }
-
   double _getPendingBalance() {
     if (_booking == null) return 0;
 
-    final total = _getTotalAmount();
-    final deposit = _getDepositAmount();
+    final total = (_booking!["totalAmount"] as num).toDouble();
+    final deposit = (_booking!["depositAmount"] as num).toDouble();
 
     final pending = total - deposit - _paymentsTotal;
     return pending < 0 ? 0 : pending;
   }
 
-  String _calculateStatus() {
-    if (_booking == null) return "Pendiente";
-
-    // Si es cotización, siempre pendiente
-    if (_isCotizacion()) return "Pendiente";
-
-    final total = _getTotalAmount();
-    final deposit = _getDepositAmount();
-    final pending = total - deposit - _paymentsTotal;
-
+  String _calculateStatus(double total, double deposit, double paymentsTotal) {
     if (total <= 0) return "Pendiente";
+
+    final pending = total - deposit - paymentsTotal;
+
     if (pending <= 0) return "Pagada";
 
     final minDeposit = total * 0.30;
+
     if (deposit >= minDeposit) return "Confirmada";
 
     return "Pendiente";
@@ -156,8 +119,11 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
 
     final db = await _db.database;
 
+    final total = (_booking!["totalAmount"] as num).toDouble();
+    final deposit = (_booking!["depositAmount"] as num).toDouble();
+
     final currentStatus = (_booking!["status"] ?? "Pendiente").toString();
-    final newStatus = _calculateStatus();
+    final newStatus = _calculateStatus(total, deposit, _paymentsTotal);
 
     if (currentStatus == "Cancelada" || currentStatus == "Finalizada") {
       return;
@@ -184,58 +150,6 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
 
       await _loadBooking();
     }
-  }
-
-  Future<void> _convertToReservation() async {
-    if (_booking == null) return;
-
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) {
-        return AlertDialog(
-          title: const Text("Convertir Cotización"),
-          content: const Text(
-            "¿Deseas convertir esta cotización en una reservación?\n\n"
-            "Esto habilitará el registro de pagos y permitirá confirmar el evento.",
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text("Cancelar"),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text("Sí, convertir"),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirm != true) return;
-
-    final db = await _db.database;
-
-    await db.update(
-      "bookings",
-      {"bookingType": "RESERVACION"},
-      where: "id = ?",
-      whereArgs: [widget.bookingId],
-    );
-
-    await _db.insertBookingLog(
-      db,
-      widget.bookingId,
-      "Cotización convertida en Reservación",
-      actionType: "CONVERT",
-      fieldChanged: "bookingType",
-      changedBy: _booking!["createdBy"] ?? "system",
-      oldValue: "COTIZACION",
-      newValue: "RESERVACION",
-    );
-
-    await _loadBooking();
-    await _autoUpdateStatusIfNeeded();
   }
 
   Future<void> _markAsCancelled() async {
@@ -341,6 +255,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
     );
 
     if (!mounted) return;
+
     Navigator.pop(context, true);
   }
 
@@ -421,15 +336,6 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
     }
   }
 
-  Color _statusColor(String status) {
-    if (status == "Pendiente") return Colors.orange;
-    if (status == "Confirmada") return Colors.blue;
-    if (status == "Pagada") return Colors.green;
-    if (status == "Cancelada") return Colors.red;
-    if (status == "Finalizada") return Colors.grey;
-    return Colors.grey;
-  }
-
   @override
   void initState() {
     super.initState();
@@ -492,7 +398,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "${booking["celebrantFirstName"] ?? ""} ${booking["celebrantLastName"] ?? ""}",
+                                "🎉 ${booking["celebrantFirstName"] ?? ""} ${booking["celebrantLastName"] ?? ""}",
                                 style: Theme.of(context)
                                     .textTheme
                                     .headlineSmall
@@ -505,90 +411,46 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                                     : "📌 Tipo: Reservación",
                               ),
                               const SizedBox(height: 6),
-                              Text("🎂 Edad: ${booking["celebrantAge"] ?? 0} años"),
+                              Text("🏷 División: ${booking["division"] ?? ""}"),
+                              const SizedBox(height: 6),
+                              Text("🎂 Edad: ${booking["celebrantAge"] ?? 0}"),
                               const SizedBox(height: 6),
                               Text("👤 Encargado: ${booking["guardianName"] ?? ""}"),
                               const SizedBox(height: 6),
                               Text("📞 ${booking["customerPhone"] ?? ""}"),
                               const SizedBox(height: 6),
-                              Text("📅 ${_formatDate(booking["eventDate"])}"),
+                              Text("👧 Cantidad de niñ@s: ${booking["childCount"] ?? 0}"),
                               const SizedBox(height: 6),
-                              Text("⏰ ${_timeSlotLabel(booking["timeSlot"] ?? "")}"),
+                              Text("📅 ${_formatDate(booking["eventDate"] ?? "")}"),
                               const SizedBox(height: 6),
-                              Text("📍 ${booking["fullAddress"] ?? ""}"),
+                              Text(
+                                "⏰ Horario: ${_timeSlotLabel(booking["timeSlot"] ?? "")}",
+                              ),
+                              const SizedBox(height: 6),
+                              Text("📍 Dirección: ${booking["fullAddress"] ?? ""}"),
                               const SizedBox(height: 6),
                               Text("🎁 Paquete: ${booking["packageName"] ?? ""}"),
-                              const SizedBox(height: 6),
-                              Text("🏷️ División: ${booking["division"] ?? "Spa Party"}"),
-                              const SizedBox(height: 14),
-
-                              // STATUS
+                              const SizedBox(height: 12),
                               Text(
                                 "Estado: ${booking["status"] ?? "Pendiente"}",
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  color: _statusColor(
-                                    (booking["status"] ?? "Pendiente").toString(),
-                                  ),
+                                  color: booking["status"] == "Pendiente"
+                                      ? Colors.orange
+                                      : booking["status"] == "Confirmada"
+                                          ? Colors.blue
+                                          : booking["status"] == "Pagada"
+                                              ? Colors.green
+                                              : booking["status"] == "Cancelada"
+                                                  ? Colors.red
+                                                  : Colors.grey,
                                 ),
                               ),
-
-                              const SizedBox(height: 12),
-
-                              // LOGISTICA
-                              if (!_isCotizacion())
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(10),
-                                    color: _isLogisticsReady()
-                                        ? Colors.green.shade50
-                                        : Colors.red.shade50,
-                                    border: Border.all(
-                                      color: _isLogisticsReady()
-                                          ? Colors.green
-                                          : Colors.red,
-                                    ),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _isLogisticsReady()
-                                            ? "🟢 LISTO PARA LOGÍSTICA"
-                                            : "🔴 AÚN NO CONFIRMADO PARA LOGÍSTICA",
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: _isLogisticsReady()
-                                              ? Colors.green
-                                              : Colors.red,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        "Depósito actual: ${_formatCurrency(_getDepositAmount())}",
-                                      ),
-                                      Text(
-                                        "Depósito mínimo (30%): ${_formatCurrency(_getMinDeposit30())}",
-                                      ),
-                                      if (!_isLogisticsReady())
-                                        Text(
-                                          "Faltan: ${_formatCurrency(_getMissingFor30())}",
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
                             ],
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 12),
-
                       Card(
                         elevation: 2,
                         child: Padding(
@@ -601,9 +463,15 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                                 style: Theme.of(context).textTheme.titleLarge,
                               ),
                               const SizedBox(height: 12),
-                              Text("Total: ${_formatCurrency(_getTotalAmount())}"),
-                              Text("Adelanto: ${_formatCurrency(_getDepositAmount())}"),
-                              Text("Pagos adicionales: ${_formatCurrency(_paymentsTotal)}"),
+                              Text(
+                                "Total: ${_formatCurrency((booking["totalAmount"] as num).toDouble())}",
+                              ),
+                              Text(
+                                "Depósito: ${_formatCurrency((booking["depositAmount"] as num).toDouble())}",
+                              ),
+                              Text(
+                                "Pagos adicionales: ${_formatCurrency(_paymentsTotal)}",
+                              ),
                               const Divider(height: 20),
                               Text(
                                 "Saldo pendiente: ${_formatCurrency(_getPendingBalance())}",
@@ -612,13 +480,15 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                                   fontSize: 16,
                                 ),
                               ),
+                              const SizedBox(height: 8),
+                              Text(
+                                "30% recomendado: ${_formatCurrency(((booking["totalAmount"] as num).toDouble() * 0.30))}",
+                              ),
                             ],
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 12),
-
                       if ((booking["notes"] ?? "").toString().trim().isNotEmpty)
                         Card(
                           elevation: 2,
@@ -630,24 +500,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                             ),
                           ),
                         ),
-
                       const SizedBox(height: 20),
-
-                      // ==========================
-                      // BOTON CONVERTIR COTIZACION
-                      // ==========================
-                      if (_isCotizacion())
-                        SizedBox(
-                          height: 52,
-                          child: ElevatedButton.icon(
-                            onPressed: _convertToReservation,
-                            icon: const Icon(Icons.check_circle),
-                            label: const Text("Convertir a Reservación"),
-                          ),
-                        ),
-
-                      if (_isCotizacion()) const SizedBox(height: 12),
-
                       Row(
                         children: [
                           Expanded(
@@ -671,7 +524,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                                       }
                                     },
                               icon: const Icon(Icons.payments),
-                              label: const Text("Registrar Pago"),
+                              label: const Text("Pagos"),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -698,9 +551,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 12),
-
                       if (booking["status"] != "Cancelada" &&
                           booking["status"] != "Finalizada")
                         SizedBox(

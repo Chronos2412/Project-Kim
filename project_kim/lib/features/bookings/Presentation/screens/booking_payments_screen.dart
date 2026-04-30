@@ -19,160 +19,283 @@ class BookingPaymentsScreen extends StatefulWidget {
 class _BookingPaymentsScreenState extends State<BookingPaymentsScreen> {
   final AppDatabase _db = AppDatabase();
 
-  final _formKey = GlobalKey<FormState>();
+  List<Map<String, dynamic>> _payments = [];
+  bool _loading = true;
 
-  final TextEditingController _amountCtrl = TextEditingController();
-  final TextEditingController _noteCtrl = TextEditingController();
-  final TextEditingController _createdByCtrl =
-      TextEditingController(text: "system");
-
-  DateTime _paymentDate = DateTime.now();
-
-  String _formatDate(DateTime date) {
-    return DateFormat("dd/MM/yyyy").format(date);
+  String _formatCurrency(double value) {
+    final f = NumberFormat.currency(locale: "es_CR", symbol: "₡");
+    return f.format(value);
   }
 
-  Future<void> _savePayment() async {
-    if (widget.bookingStatus == "Cancelada") {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No se pueden registrar pagos en una reservación cancelada.")),
-      );
-      return;
-    }
+  String _formatDate(String isoDate) {
+    final d = DateTime.tryParse(isoDate);
+    if (d == null) return isoDate;
+    return DateFormat("dd/MM/yyyy").format(d);
+  }
 
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _loadPayments() async {
+    setState(() => _loading = true);
 
     final db = await _db.database;
 
-    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
-
-    if (amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("El monto debe ser mayor a 0.")),
-      );
-      return;
-    }
-
-    final data = {
-      "bookingId": widget.bookingId,
-      "amount": amount,
-      "paymentDate": _paymentDate.toIso8601String(),
-      "createdAt": DateTime.now().toIso8601String(),
-      "createdBy": _createdByCtrl.text.trim(),
-      "note": _noteCtrl.text.trim(),
-    };
-
-    await db.insert("booking_payments", data);
-
-    await _db.insertBookingLog(
-      db,
-      widget.bookingId,
-      "Pago registrado: ₡${amount.toStringAsFixed(2)}",
-      actionType: "PAYMENT",
-      fieldChanged: "payments",
-      changedBy: _createdByCtrl.text.trim(),
-      oldValue: "",
-      newValue: amount.toString(),
+    final results = await db.query(
+      "booking_payments",
+      where: "bookingId = ?",
+      whereArgs: [widget.bookingId],
+      orderBy: "paymentDate DESC",
     );
 
-    if (!mounted) return;
-
-    Navigator.pop(context, true);
+    setState(() {
+      _payments = results;
+      _loading = false;
+    });
   }
 
-  Future<void> _pickPaymentDate() async {
-    final picked = await showDatePicker(
+  double _getTotalPayments() {
+    double total = 0;
+    for (final p in _payments) {
+      total += (p["amount"] as num).toDouble();
+    }
+    return total;
+  }
+
+  Future<void> _addPayment() async {
+    final amountController = TextEditingController();
+    final noteController = TextEditingController();
+
+    final confirm = await showDialog<bool>(
       context: context,
-      initialDate: _paymentDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
-    );
-
-    if (picked != null) {
-      setState(() {
-        _paymentDate = picked;
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _amountCtrl.dispose();
-    _noteCtrl.dispose();
-    _createdByCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Registrar Pago"),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: ListView(
+      builder: (_) {
+        return AlertDialog(
+          title: const Text("Registrar Pago"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              TextFormField(
-                controller: _amountCtrl,
+              TextField(
+                controller: amountController,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: "Monto del pago (₡)",
+                  labelText: "Monto (₡)",
                   border: OutlineInputBorder(),
                 ),
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return "Campo requerido";
-
-                  final parsed = double.tryParse(v.trim());
-                  if (parsed == null || parsed <= 0) return "Monto inválido";
-
-                  return null;
-                },
               ),
               const SizedBox(height: 12),
-
-              ListTile(
-                title: const Text("Fecha del pago"),
-                subtitle: Text(_formatDate(_paymentDate)),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: _pickPaymentDate,
-              ),
-
-              const SizedBox(height: 12),
-
-              TextFormField(
-                controller: _noteCtrl,
-                maxLines: 2,
+              TextField(
+                controller: noteController,
                 decoration: const InputDecoration(
                   labelText: "Nota (opcional)",
                   border: OutlineInputBorder(),
                 ),
-              ),
-              const SizedBox(height: 12),
-
-              TextFormField(
-                controller: _createdByCtrl,
-                decoration: const InputDecoration(
-                  labelText: "Creado por",
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? "Campo requerido" : null,
-              ),
-              const SizedBox(height: 20),
-
-              SizedBox(
-                height: 50,
-                child: ElevatedButton.icon(
-                  onPressed: _savePayment,
-                  icon: const Icon(Icons.save),
-                  label: const Text("Guardar Pago"),
-                ),
+                maxLines: 2,
               ),
             ],
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Cancelar"),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("Guardar"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    final amount = double.tryParse(amountController.text.trim()) ?? 0.0;
+
+    if (amount <= 0) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Monto inválido.")),
+      );
+      return;
+    }
+
+    final db = await _db.database;
+
+    final now = DateTime.now();
+    final nowIso = now.toIso8601String();
+
+    await db.insert("booking_payments", {
+      "bookingId": widget.bookingId,
+      "amount": amount,
+      "paymentDate": nowIso,
+      "createdAt": nowIso,
+      "createdBy": "system",
+      "note": noteController.text.trim(),
+    });
+
+    await _db.insertBookingLog(
+      db,
+      widget.bookingId,
+      "Pago registrado: ${_formatCurrency(amount)}",
+      actionType: "PAYMENT",
+      fieldChanged: "amount",
+      changedBy: "system",
+      oldValue: "",
+      newValue: amount.toString(),
+    );
+
+    await _loadPayments();
+
+    if (!mounted) return;
+    Navigator.pop(context, true);
+  }
+
+  Future<void> _deletePayment(int paymentId, double amount) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          title: const Text("Eliminar Pago"),
+          content: Text(
+            "¿Deseas eliminar este pago?\n\nMonto: ${_formatCurrency(amount)}",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Cancelar"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("Eliminar"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    final db = await _db.database;
+
+    await db.delete(
+      "booking_payments",
+      where: "id = ?",
+      whereArgs: [paymentId],
+    );
+
+    await _db.insertBookingLog(
+      db,
+      widget.bookingId,
+      "Pago eliminado: ${_formatCurrency(amount)}",
+      actionType: "PAYMENT_DELETE",
+      fieldChanged: "amount",
+      changedBy: "system",
+      oldValue: amount.toString(),
+      newValue: "",
+    );
+
+    await _loadPayments();
+
+    if (!mounted) return;
+    Navigator.pop(context, true);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPayments();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalPayments = _getTotalPayments();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Pagos del Evento"),
+        actions: [
+          IconButton(
+            onPressed: _loadPayments,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _addPayment,
+        icon: const Icon(Icons.add),
+        label: const Text("Agregar pago"),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "Total pagado",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      _formatCurrency(totalPayments),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _payments.isEmpty
+                      ? const Center(child: Text("No hay pagos registrados."))
+                      : ListView.builder(
+                          itemCount: _payments.length,
+                          itemBuilder: (context, index) {
+                            final p = _payments[index];
+
+                            final amount = (p["amount"] as num).toDouble();
+
+                            return Card(
+                              elevation: 2,
+                              child: ListTile(
+                                leading: const Icon(Icons.payments),
+                                title: Text(
+                                  _formatCurrency(amount),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text("📅 ${_formatDate(p["paymentDate"] ?? "")}"),
+                                    if ((p["note"] ?? "")
+                                        .toString()
+                                        .trim()
+                                        .isNotEmpty)
+                                      Text("📝 ${p["note"]}"),
+                                  ],
+                                ),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  onPressed: () => _deletePayment(
+                                    p["id"] as int,
+                                    amount,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+            ),
+          ],
         ),
       ),
     );
