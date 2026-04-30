@@ -152,6 +152,87 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
     }
   }
 
+  // =========================
+  // CONVERT COTIZACION -> RESERVACION
+  // =========================
+  Future<void> _convertToReservation() async {
+    if (_booking == null) return;
+
+    final bookingType = (_booking!["bookingType"] ?? "").toString().toUpperCase();
+    if (bookingType != "COTIZACION") return;
+
+    final total = (_booking!["totalAmount"] as num).toDouble();
+    final deposit = (_booking!["depositAmount"] as num).toDouble();
+
+    final minDeposit = total * 0.30;
+
+    final newStatus = deposit >= minDeposit ? "Confirmada" : "Pendiente";
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          title: const Text("Convertir a Reservación"),
+          content: Text(
+            "Esta cotización será convertida a RESERVACIÓN.\n\n"
+            "Depósito actual: ${_formatCurrency(deposit)}\n"
+            "30% requerido: ${_formatCurrency(minDeposit)}\n\n"
+            "Nuevo estado: $newStatus\n\n"
+            "¿Deseas continuar?",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Cancelar"),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("Sí, convertir"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    final db = await _db.database;
+
+    await db.update(
+      "bookings",
+      {
+        "bookingType": "RESERVACION",
+        "status": newStatus,
+      },
+      where: "id = ?",
+      whereArgs: [widget.bookingId],
+    );
+
+    await _db.insertBookingLog(
+      db,
+      widget.bookingId,
+      "Cotización convertida a reservación",
+      actionType: "UPDATE",
+      fieldChanged: "bookingType",
+      changedBy: _booking!["createdBy"] ?? "system",
+      oldValue: "COTIZACION",
+      newValue: "RESERVACION",
+    );
+
+    await _db.insertBookingLog(
+      db,
+      widget.bookingId,
+      "Estado ajustado automáticamente al convertir: $newStatus",
+      actionType: "STATUS",
+      fieldChanged: "status",
+      changedBy: _booking!["createdBy"] ?? "system",
+      oldValue: (_booking!["status"] ?? "Pendiente").toString(),
+      newValue: newStatus,
+    );
+
+    await _loadBooking();
+  }
+
   Future<void> _markAsCancelled() async {
     if (_booking == null) return;
 
@@ -501,6 +582,25 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                           ),
                         ),
                       const SizedBox(height: 20),
+
+                      // =========================
+                      // CONVERT BUTTON
+                      // =========================
+                      if (_isCotizacion()) ...[
+                        SizedBox(
+                          height: 52,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                            ),
+                            onPressed: _convertToReservation,
+                            icon: const Icon(Icons.swap_horiz),
+                            label: const Text("Convertir a Reservación"),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
                       Row(
                         children: [
                           Expanded(
