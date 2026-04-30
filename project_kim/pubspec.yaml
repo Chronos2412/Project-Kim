@@ -1,6 +1,6 @@
 name: project_kim
-description: ERP y sistema de reservaciones para Experiencias 360°
-publish_to: "none"
+description: "Project Kim App"
+publish_to: 'none'
 
 version: 1.0.0+1
 
@@ -12,19 +12,13 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.6
-
-  # DB
   sqflite: ^2.3.3+1
   path: ^1.9.0
-
-  # UI / Utils
   intl: ^0.19.0
-
-  # PDF / Export
-  pdf: ^3.10.8
-  printing: ^5.13.1
-  excel: ^4.0.3
+  printing: ^5.13.4
+  pdf: ^3.11.0
   file_selector: ^1.0.3
+  excel: ^4.0.6
 
 dev_dependencies:
   flutter_test:
@@ -36,7 +30,6 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/logo_experiencias360.jpg
     - assets/logos/
     - assets/fonts/
 
